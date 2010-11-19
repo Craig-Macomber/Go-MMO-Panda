@@ -2,61 +2,77 @@ package main
 
 import (
 	"time"
+	"fmt"
 )
 
-// unordered collection
+// similar to an unrolled linked list, but with better memory efficency
+// and with faster but order disrupting removes.
+// collection, remove disrupts order,
+// iterable (bidirectionally, allows removing and adding while iterating)
+// non indexable
 // Non safe for concurrent use of Add or Remove
 // use your own mutex if needed
+// optimized for gorwing/shrinking as needed and good cache perforamnce
+// constant time remove disrupts order,
+// but Pop can be used to remove the last while maintaining order
+// supports efficent multi core parallel iteration (untested!) without add and remove.
 
-const arraySize=256
+// potentially split-able (fast, but lienar time)
+// and merge-able (constant time, but disrupts order) quickly,
+// but not yet implemented
+
+const arraySize=512
 const clear=false // if Entry contains pointers, set clear to true to allow GC
 
 type IterBag struct {
     start *node
     end *node
     nodeCount int
+    fillIndex int // index of last item in end
 }
 
-type Entry struct {
-    Data int //SomeType
-}
+type Entry int
 
 type node struct {
 	Previous *node
 	Next *node
-	Data []Entry
+	Data [arraySize]Entry
 }
 
 
 func NewIterBag() *IterBag {
-    n:=&node{nil,nil,make([]Entry,0,arraySize)}
-	return &IterBag{n, n, 1}
+    n:=new(node)
+	return &IterBag{start: n, end: n, nodeCount: 1, fillIndex: -1}
 }
 
+// adds element to end
 func (s *IterBag) Add(x Entry) {
-	if len(s.end.Data)==arraySize {
-	    n:=&node{s.end,nil,make([]Entry,1,arraySize)}
-	    n.Data[0]=x
+	if s.fillIndex>=arraySize-1 {
+        n:=&node{Previous: s.end}
+        n.Data[0]=x
 	    s.end.Next=n
 	    s.end=n
 	    s.nodeCount++
+	    s.fillIndex=0
 	} else {
-	    slice := s.end.Data[0:1+len(s.end.Data)]
-	    slice[len(slice)-1]=x
-	    s.end.Data = slice
+	    s.fillIndex++
+	    s.end.Data[s.fillIndex]=x
 	}
 }
 
+// overwrites the passed Entry with the last entry, then removes the last entry.
 func (s *IterBag) remove(e *Entry) (last bool){
-	old := s.end.Data
-	endIndex := len(old)-1
-	last=e==&old[endIndex]
-	*e=old[endIndex]
-	s.end.Data = old[:endIndex]
+	last=e==&s.end.Data[s.fillIndex]
+	*e=s.end.Data[s.fillIndex]
+	
 	if clear {
-	    old[endIndex]=*new(Entry)
+	    s.end.Data[s.fillIndex]=*new(Entry)
 	}
-	if len(s.end.Data)==0 && s.start!=s.end {
+	
+	s.fillIndex--
+	
+	if s.fillIndex<0 && s.start!=s.end {
+	    s.fillIndex=arraySize-1
 	    s.end=s.end.Previous
 	    s.end.Next=nil
 	    s.nodeCount--
@@ -64,16 +80,24 @@ func (s *IterBag) remove(e *Entry) (last bool){
 	return
 }
 
+// remove and return the last element for stack like use
+func (s *IterBag) Pop() (e Entry) {
+	s.remove(&e) // explotes how remove works
+	return
+}
+
+
 func (s *IterBag) Length() int{
-    return (s.nodeCount-1)*arraySize+len(s.end.Data)
+    return (s.nodeCount-1)*arraySize+s.fillIndex+1
 }
 
 // safe to modify entries in returned blocks, but calling Add or Remove while
 // processing will cause unexpected issues
 func (s *IterBag) BlockChan(out chan<- []Entry) {
-    for n:=s.start ; n!=nil ; n=n.Next {
-        out<-n.Data
+    for n:=s.start ; n.Next!=nil ; n=n.Next {
+        out<-n.Data[:]
     }
+    out<-s.end.Data[:s.fillIndex+1]
     close(out)
 }
 
@@ -94,7 +118,7 @@ func (s *IterBag) NewIterator() *Iterator{
 }
 
 // removes Current, and goes to and returns Next. Effects ordering (last moved to Next)
-func (i *Iterator) Remove() *Entry{
+func (i *Iterator) Remove() (out *Entry){
     if i.Bag.remove(i.Current) {
         i.Current=nil
     } else {
@@ -113,16 +137,15 @@ func (i *Iterator) Add(e Entry) {
 func (i *Iterator) GoBack() {
     i.Next=i.Current
     i.index--
-    if i.index<0 {
-        i.n = i.n.Previous
-        i.index=len(i.n.Data)-1
-    }
-    if i.index>0 { // next is first in node
+    if i.index>0 {
         i.Current = &i.n.Data[i.index-1]
+    } else if i.index<0 {
+        i.n = i.n.Previous
+        i.index=arraySize-1
     } else {
         if i.n.Previous!=nil {
             d:=i.n.Previous.Data
-            i.Current = &d[len(d)-1]
+            i.Current = &d[arraySize-1]
         } else {
             i.Current = nil
         }
@@ -133,7 +156,7 @@ func (i *Iterator) GoBack() {
 func (i *Iterator) Iter() (*Entry){
     i.Current=i.Next
     i.index++
-    if i.index<len(i.n.Data) {
+    if i.index<arraySize && (i.n.Next!=nil || i.index<=i.Bag.fillIndex) {
         i.Next = &i.n.Data[i.index]
     } else {
         if i.n.Next==nil {
@@ -152,141 +175,63 @@ func (i *Iterator) Iter() (*Entry){
 func main() {
     s:=NewIterBag()
     t := time.Nanoseconds()
-//     for i := 0; i < 10000000; i++ {
-//         s.Add(Entry{i})
-//     }
-//     println(time.Nanoseconds()-t)
-// 
-//     
-//     t = time.Nanoseconds()
-//     
-//     bChan:=make(chan IterBlock)
-//     go s.BlockChan(bChan)
-//     L: for b:=range bChan{
-//         d:=b.AllData()
-//         //println("Block")
-//         for i:=0 ; i<b.Length() ; i++ {
-//             if d[i].Data%7==0 || d[i].Data%5==0 {
-//                 //println("Removed:",d[i].Data,i)
-//                 if b.Remove(i) { 
-//                     break L
-//                 }
-//                 i--
-//             }
-//         }
-//     }
-//     println(time.Nanoseconds()-t,s.Length())
-    
 
+    fmt.Println("IterBag Test")
     
-    println("IterTest")
-    
+    const count=1000000
     s=NewIterBag()
     t = time.Nanoseconds()
-    for i := 0; i < 10000000; i++ {
-        s.Add(Entry{i})
+    for i := 0; i < count; i++ {
+        s.Add(Entry(i))
     }
-    println(time.Nanoseconds()-t)
-    t = time.Nanoseconds()
+    fmt.Println("Add Time:",float(time.Nanoseconds()-t)/count)
+    
     
     iter:=s.NewIterator()
-    println(iter.Current,iter.Next)
+    t = time.Nanoseconds()
     for e:=iter.Current ; e!=nil ; e=iter.Iter() {
-        for e!=nil && (e.Data%7==0 || e.Data%5==0) {
-            e=iter.Remove()
-        }
-    }    
-    println(time.Nanoseconds()-t,s.Length())
-//     iter=s.NewIterator()
-//     for e:=iter.Current ; e!=nil ; e=iter.Iter() {
-//         println(e.Data)
-//     }    
+    }
+    fmt.Println("Iter Time:",float(time.Nanoseconds()-t)/count)
+    
+    t = time.Nanoseconds()
+    iter.GoBack()
+    for ; iter.Current!=nil ; iter.GoBack() {
+    }
+    fmt.Println("Reverse Iter Time:",float(time.Nanoseconds()-t)/count)
     
     
+    iter=s.NewIterator()
+    t = time.Nanoseconds()
+    e:=iter.Current
+    for e!=nil {
+        e=iter.Remove()
+    }
+    fmt.Println("Remove Time:",float(time.Nanoseconds()-t)/count)
+
     
-//     s=NewIterBag()
-//     t = time.Nanoseconds()
-//     for i := 0; i < 10000000; i++ {
-//         s.Add(Entry{i})
-//     }
-//     println(time.Nanoseconds()-t)
-//     t = time.Nanoseconds()
-//     
-//     s.Feed (func(b IterBlock) {
-//         d:=b.AllData()
-//         for i:=0 ; i<b.Length() ; i++ {
-//             if d[i].Data%7==0 || d[i].Data%5==0 {
-//                 if b.Remove(i) { 
-//                     return
-//                 }
-//                 i--
-//             }
-//         }
-//     })
-//     
-//     println(time.Nanoseconds()-t)
-//     
-//     s=NewIterBag()
-//     s.Add(Entry{1})
-//     last:=1
-//     s.Feed (func(b IterBlock) {
-//         d:=b.AllData()
-//         for i:=0 ; i<b.Length() ; i++ {
-//             x:=d[i].Data
-//             s.Add(Entry{last+x})
-//             last=x
-//             if last>100000 {
-//                 return
-//             }
-//         }
-//     })
-//     println(time.Nanoseconds()-t)
-//     
-//     println("Remove 2s")
-//     s=NewIterBag()
-//     t = time.Nanoseconds()
-//     for i := 0; i < 10000; i++ {
-//         s.Add(Entry{i})
-//     }
-//     println(time.Nanoseconds()-t)
-//     t = time.Nanoseconds()
-//     
-//     s.Feed (func(b IterBlock) {
-//         d:=b.AllData()
-//         for i:=0 ; i<b.Length() ; i++ {
-//             x:=d[i].Data
-//             if x%2==0 {
-//                 d[i].Data=x+1
-//                 //s.Add(Entry{x+1})
-//                 s.Add(Entry{x-1})
-// //                 if b.Remove(i) { 
-// //                     return
-// //                 }
-// //                 i--
-//             }
-//         }
-//     })
-//     println(time.Nanoseconds()-t)
-//     
-//     
-//     //bench ItemChan
-//     println("ItemChan")
-//     s=NewIterBag()
-//     t = time.Nanoseconds()
-//     for i := 0; i < 10000000; i++ {
-//         s.Add(Entry{i})
-//     }
-//     println(time.Nanoseconds()-t)
-//     t = time.Nanoseconds()
-//     
-//     iChan:=make(chan *Entry)
-//     oChan:=make(chan *Entry)
-//     go s.ItemChan(iChan,oChan)
-//     for e:= range(oChan) {
-//         if e.Data%7==0 || e.Data%5==0 {
-//             iChan<-nil
-//         }
-//     }
-//     println(time.Nanoseconds()-t)
+    println("Slice Test")
+    ss:=make([]Entry,0)
+    t = time.Nanoseconds()
+    for i := 0; i < count; i++ {
+        ss=append(ss,Entry(i))
+    }
+    fmt.Println("Add Time:",float(time.Nanoseconds()-t)/count)
+    
+    ss=make([]Entry,count)
+    t = time.Nanoseconds()
+    for i := 0; i < count; i++ {
+        ss[i]=Entry(i)
+    }
+    fmt.Println("Add Time:",float(time.Nanoseconds()-t)/count)
+    
+    println("Map Test")
+    m:=map[Entry] int{}
+    t = time.Nanoseconds()
+    for i := 0; i < count; i++ {
+        m[Entry(i)]=0
+    }
+    fmt.Println("Add Time:",float(time.Nanoseconds()-t)/count)
+    
+    
     println ("Last")
 }
