@@ -3,7 +3,7 @@ import zlib
 
 def gzipXorDelta(data,delta):
     rawDelta=zlib.decompress(delta)
-    return [ord(data[i])^ord(rawDelta[i]) for i in xrange(len(data))]
+    return ''.join([chr(ord(data[i])^ord(rawDelta[i])) for i in xrange(len(data))])
 
 binDeltaMap={
     # keyframe

@@ -1,6 +1,6 @@
 from twisted.internet import reactor
 
-from clientNodes import Node, HttpFile, MessageStream, KeyFrameBinDelta
+from clientNodes import Node, HttpFile, MessageStream, KeyFrameBinDelta, RamSync
 import protocol
 
 class Root(Node):
@@ -59,8 +59,7 @@ class TestServer(KeyFrameBinDelta):
         KeyFrameBinDelta.load(self)
         self.updatedCallbacks.append(self.handelUpdate)
     def handelUpdate(self):
-        print "Test Update"
-        print self.data
+        print "Got Update: "+self.data
 
 root=Root()
 stream=MessageStream()

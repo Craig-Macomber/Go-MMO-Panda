@@ -1,21 +1,11 @@
 package main
 
 import (
-	//"runtime"
-	//"time"
-	"net"
 	"http"
+	"/tcp"
 	"io"
 	"io/ioutil"
 )
-
-func con(listener net.Listener) {
-    con,err:=listener.Accept()
-    println(err)
-    con.Write([]byte("\x00TestMessage"))
-    con.Write([]byte("\x00Message2!"))
-    //println(con.Read(20))
-}
 
 
 func httpHandler(w http.ResponseWriter, r *http.Request) {
@@ -29,14 +19,14 @@ func httpHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func setupHttp() {
+    println("hosting http")
 	http.HandleFunc("/", httpHandler)
 	http.ListenAndServe(":8080", nil)
 }
 
 func main() {
-    listener,err:=net.Listen("tcp","127.0.0.1:6666")
-    println(err)
-    go con(listener)
+    halt:=make(chan int)
+    tcp.SetupTCP(halt)
     
     setupHttp()
     
