@@ -59,7 +59,7 @@ class TestServer(KeyFrameBinDelta):
         KeyFrameBinDelta.load(self)
         self.updatedCallbacks.append(self.handelUpdate)
     def handelUpdate(self):
-        print "Got Update: "+self.data
+        pass#print "Got Update: "#+self.data
 
 root=Root()
 stream=MessageStream()
