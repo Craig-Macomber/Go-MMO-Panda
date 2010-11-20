@@ -1,4 +1,4 @@
-package iterBag
+package iterBag(type Entry)
 
 // similar to an unrolled linked list, but with better memory efficency
 // and with faster but order disrupting removes.
@@ -25,8 +25,6 @@ type IterBag struct {
     nodeCount int
     fillIndex int // index of last item in end
 }
-
-type Entry int
 
 type node struct {
 	Previous *node

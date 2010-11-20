@@ -1,7 +1,7 @@
 package tcp
 
 import (
-	//"time"
+	"time"
 	"net"
 	//"/iterBag"
 	//"io"
@@ -22,7 +22,8 @@ func getConnections(listener net.Listener, out chan<- *net.Conn, halt <-chan int
             case out <- &con:
             }
         } else {
-            println(err)
+            println(err.String())
+            time.Sleep(100000000)//some error trying to get a socket, so waite before retry
         }
     }
 }
@@ -62,11 +63,11 @@ func updateLoop(bag *IterBag, halt <-chan int) {
     xOrData:=make([]byte,size)
     frameCount:=0
     for !closed(halt) {
-        //time.Sleep(10000000)
+        time.Sleep(4000000)
         
         frameCount++
-        if frameCount%1000==0 {
-            println(frameCount)
+        if frameCount%100==0 {
+            println(frameCount," - ",bag.Length())
         }
         for n:=0 ; n<size ; n++ {
             xOrData[n]=data[n]^keyFrame[n]

@@ -1,6 +1,6 @@
 package tcp
 
-//import("/tcp")
+
 
 // similar to an unrolled linked list, but with better memory efficency
 // and with faster but order disrupting removes.
@@ -19,7 +19,7 @@ package tcp
 // but not yet implemented
 
 const arraySize=512
-const clear=false // if Connected contains pointers, set clear to true to allow GC
+const clear=false // if Entry contains pointers, set clear to true to allow GC
 
 type IterBag struct {
     start *node
@@ -27,8 +27,6 @@ type IterBag struct {
     nodeCount int
     fillIndex int // index of last item in end
 }
-
-//type Connected int
 
 type node struct {
 	Previous *node
@@ -46,17 +44,17 @@ func (s *IterBag) Add(x Connected) {
 	if s.fillIndex>=arraySize-1 {
         n:=&node{Previous: s.end}
         n.Data[0]=x
+        s.fillIndex=0
 	    s.end.Next=n
 	    s.end=n
 	    s.nodeCount++
-	    s.fillIndex=0
 	} else {
+	    s.end.Data[s.fillIndex+1]=x
 	    s.fillIndex++
-	    s.end.Data[s.fillIndex]=x
 	}
 }
 
-// overwrites the passed Connected with the last Connected, then removes the last Connected.
+// overwrites the passed Entry with the last entry, then removes the last entry.
 func (s *IterBag) remove(e *Connected) (last bool){
 	last=e==&s.end.Data[s.fillIndex]
 	*e=s.end.Data[s.fillIndex]
@@ -155,4 +153,9 @@ func (i *Iterator) Iter(){
             i.Current = &i.n.Data[0]
         }
     }
+}
+// Here we will test that the types parameters are ok...
+func testTypes(arg0 Connected) {
+    f := func(interface{}) { } // this func does nothing...
+    f(arg0)
 }

@@ -62,9 +62,12 @@ class TestServer(KeyFrameBinDelta):
         pass#print "Got Update: "#+self.data
 
 root=Root()
-stream=MessageStream()
-testServer=TestServer(messageStream=stream)
-protocol.serverToMessageStream(root.serverList.servers["Login"],stream)
+x=[]
+for i in range(20):
+    stream=MessageStream()
+    testServer=TestServer(messageStream=stream)
+    protocol.serverToMessageStream(root.serverList.servers["Login"],stream)
+    x.append(testServer)
 
 
 reactor.run()

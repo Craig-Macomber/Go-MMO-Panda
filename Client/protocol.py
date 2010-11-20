@@ -19,6 +19,13 @@ class MessageStream(Protocol):
         self._handelData()
         
     def _handelData(self):
+        maxMessageSize=10000
+        maxBackLog=50000
+        hardLimitBackLog=100000
+        if len(self._inData)>hardLimitBackLog:
+            print "Disconnected because hardLimitBackLog of messages"
+            self.owner.disconnect()
+            return
         if len(self._inData)>=self._protocalHeader.size:
             
             h=self._protocalHeader.unpack(self._inData[:self._protocalHeader.size])
@@ -31,11 +38,20 @@ class MessageStream(Protocol):
                 print lengthCheck
                 self.owner.disconnect()
                 return
-                
+            if length > maxMessageSize:
+                print "Disconnected because too long message:",length
+                self.owner.disconnect()
+                return
+            
             if len(self._inData)>=length:
-                self.owner.dataReceived(self._inData[self._protocalHeader.size:length])
+                if len(self._inData)<maxBackLog:
+                    self.owner.dataReceived(self._inData[self._protocalHeader.size:length])
+                else:
+                    print "Excessive backlog, dropping messages"
                 self._inData=self._inData[length:]
                 self._handelData()
+                
+                    
                 
     
 class MessageStreamClientFactory(ReconnectingClientFactory):
