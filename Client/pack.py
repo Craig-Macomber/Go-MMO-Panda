@@ -5,6 +5,8 @@ def gzipXorDelta(data,delta):
     rawDelta=zlib.decompress(delta)
     return ''.join([chr(ord(data[i])^ord(rawDelta[i])) for i in xrange(len(data))])
 
+notNeedsData=set([0,1])
+
 binDeltaMap={
     # keyframe
     0:lambda data,delta:delta,

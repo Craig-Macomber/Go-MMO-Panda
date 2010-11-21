@@ -1,8 +1,21 @@
 package iterBag(type Entry)
 
+//Generic Container via gotgo
+//Summery of built in operations:
+//Add: O(1) - Adds to end, can be used while iterating, or otherwise
+//Remove: O(1) - Moves last item over current, use while iterating
+//Pop: O(1) - Returns last item
+//Length O(1) - Number of items
+//BlockChan O(n) - Feeds slices of data to a channel for concurrent processing and updating
+//    remove is not possible while iterating this way. Adding is, but added
+//    items may or may not show up in the current pass
+
+//Concurrency:
+// Adding while iterating is not well tested,
+// but should work except for possible causing the last block to not get in that pass
+
 // similar to an unrolled linked list, but with better memory efficency
 // and with faster but order disrupting removes.
-// collection, remove disrupts order,
 // iterable (bidirectionally, allows removing and adding while iterating)
 // non indexable
 // Non safe for concurrent use of Add or Remove
@@ -15,8 +28,9 @@ package iterBag(type Entry)
 // potentially split-able (fast, but lienar time)
 // and merge-able (constant time, but disrupts order) quickly,
 // but not yet implemented
+// shifting blocks from one bag to another for quick balancing should be easy to impliment as well
 
-const arraySize=128
+const arraySize=128 // Number of Entries ber block
 const clear=false // if Entry contains pointers, set clear to true to allow GC
 
 type IterBag struct {
