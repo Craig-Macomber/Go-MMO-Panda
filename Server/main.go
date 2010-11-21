@@ -2,7 +2,7 @@ package main
 
 import (
 	"http"
-	"/tcp"
+	"tcp"
 	"io"
 	"io/ioutil"
 )

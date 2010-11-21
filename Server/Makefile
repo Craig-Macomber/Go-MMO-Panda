@@ -1,8 +1,5 @@
 include $(GOROOT)/src/Make.inc
 
-DIRS=\
-    tcp\
-
 TARG=main
 GOFILES=\
 	main.go\

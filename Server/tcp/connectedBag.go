@@ -18,7 +18,7 @@ package tcp
 // and merge-able (constant time, but disrupts order) quickly,
 // but not yet implemented
 
-const arraySize=512
+const arraySize=128
 const clear=false // if Entry contains pointers, set clear to true to allow GC
 
 type IterBag struct {
