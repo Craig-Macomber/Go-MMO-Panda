@@ -13,7 +13,8 @@ DEPS="tcp"
 for dep in ${DEPS}; do
 	cd $dep ; gomake ; cd ..
 done
+# gomake clean
 gomake
 
-6l _go_.6
+6l -L tcp/_obj _go_.6
 ./6.out

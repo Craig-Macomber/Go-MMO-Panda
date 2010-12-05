@@ -10,20 +10,37 @@ import (
 	"compress/zlib"
 )
 
-func getConnections(listener net.Listener, out chan<- *net.Conn, halt <-chan int) {
+
+
+func wait(ns int64, halt <-chan int) (halted bool){
+    waitChan:=make(chan int)
+    go func() {
+        time.Sleep(ns)
+        close(waitChan)
+    } ()
+    select {
+    case _ = <-waitChan:
+        halted = false
+    case _ = <-halt:
+        halted = true
+    }
+    return
+}
+
+func getConnections(listener net.Listener, out chan<- *net.Conn) {
     for {
         println("listener listening")
         con,err:=listener.Accept()
         if err==nil {
             select {
-            case _ = <- halt:
-                close(out)
-                return
+//             case _ = <- halt:
+//                 close(out)
+//                 return
             case out <- &con:
             }
         } else {
             println(err.String())
-            time.Sleep(100000000)//some error trying to get a socket, so waite before retry
+            time.Sleep(100000000)//some error trying to get a socket, so wait before retry
         }
     }
 }
@@ -51,7 +68,7 @@ func welcomTestLoop(in <-chan *Connected, bag *IterBag) {
     }
 }
 
-func updateLoop(bag *IterBag, halt <-chan int) {
+func updateLoop(bag *IterBag) {
     const size=100
     data:=make([]byte,size)
     
@@ -62,9 +79,7 @@ func updateLoop(bag *IterBag, halt <-chan int) {
     keyFrame:=make([]byte,size)
     xOrData:=make([]byte,size)
     frameCount:=0
-    for !closed(halt) {
-        time.Sleep(4000000)
-        
+    for {
         frameCount++
         if frameCount%100==0 {
             println(frameCount," - ",bag.Length())
@@ -114,21 +129,20 @@ func updateLoop(bag *IterBag, halt <-chan int) {
                 println("removed a connection")
             }
         }
+        //time.Sleep(1000)
     }
 }
 
-func SetupTCP(halt <-chan int) {
+func SetupTCP() {
     println("Setting Up TCP")
     const connectedAndWaitingMax=4
-    
     conChan:=make(chan *net.Conn, connectedAndWaitingMax)
-
     listener,err:=net.Listen("tcp","127.0.0.1:6666")
     if err!=nil {
         println(err)
     }
 
-    go getConnections(listener,conChan,halt)
+    go getConnections(listener,conChan)
     
     connectedChan :=make(chan *Connected)
     
@@ -136,7 +150,7 @@ func SetupTCP(halt <-chan int) {
     
     bag:=NewIterBag()
     go welcomTestLoop(connectedChan,bag)
-    go updateLoop(bag,halt)
+    go updateLoop(bag)
     
     println("TCP Setup")
 

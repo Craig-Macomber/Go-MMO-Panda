@@ -5,6 +5,7 @@ import (
 	"tcp"
 	"io"
 	"io/ioutil"
+	//"os"
 )
 
 
@@ -26,9 +27,9 @@ func setupHttp() {
 
 func main() {
     halt:=make(chan int)
-    tcp.SetupTCP(halt)
+    tcp.SetupTCP()
+    go setupHttp()
     
-    setupHttp()
-    
+    _ = <-halt
     println("Over")
 }
