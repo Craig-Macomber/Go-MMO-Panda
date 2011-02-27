@@ -1,3 +1,4 @@
 SigHere-CurrentlyNotImplimented
 master Login 127.0.0.1 6666 rawTCP PublicKey AdditionalColumnsAsNeeded
-master ServerList 127.0.0.1 6666 rawTCP PublicKey AdditionalColumnsAsNeeded
+master ServerList 127.0.0.1 8080 http PublicKey AdditionalColumnsAsNeeded
+master Status 127.0.0.1 8080 http PublicKey AdditionalColumnsAsNeeded

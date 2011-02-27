@@ -9,13 +9,14 @@ class Root(Node):
         
         # hard coded root data
         self.masterPublicKey="xxx"
-        self.masterServerAddress="http://127.0.0.1:8080/serverList"
+        self.masterServerAddress="http://127.0.0.1"
         
         # load subnode, the serverList
-        self.serverList=ServerList(
-                    key=self.masterPublicKey,
-                    address=self.masterServerAddress,
-                    loadCallBacks=[self.loaded])
+        masterServer=Server("master",self.masterServerAddress,8080,"http",self.masterPublicKey)
+        
+        self.serverList=ServerList(address=masterServer.httpAddress("ServerList"),
+            key=masterServer.key,
+            loadCallBacks=[self.loaded])
 
     def loaded(self):
         Node.loaded(self)
@@ -34,26 +35,26 @@ class ServerList(HttpFile):
        
         # parse listText
         lines=self.fileText.splitlines()
+        print lines
         self.servers={}
         for s in lines[1:]:
             t=s.split()
-            self.servers[t[1]]=Server(*t[1:5])
+            self.servers[t[1]]=Server(*t[1:6])
         
         self.loaded()
         print "ServerList loaded"
         
 class Server(object):
-    def __init__(self,name,address,port,protocal):
+    def __init__(self,name,address,port,protocal,key):
         self.name=name
         self.address=address
         self.port=port
         self.protocal=protocal
-    def getConnection(self,params=None):
-        if self.protocal=='fgTCP':
-            print "Not supported!"
-        else:
-            print 'Unsupported Protocal "'+self.protocal+'" failed to connect to "'+self.name+'"'
-
+        self.key=key
+        print "Server Loaded:",name,address,port,key
+    def httpAddress(self,location=""):
+        return self.address+":"+str(self.port)+"/"+location
+        
 class TestServer(KeyFrameBinDelta):
     def load(self): 
         KeyFrameBinDelta.load(self)

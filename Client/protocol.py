@@ -4,7 +4,7 @@ from sys import stdout
 
 import struct
 
-class MessageStream(Protocol):
+class _MessageStream(Protocol):
     def __init__(self,owner):
         self.owner=owner
         #Protocol.__init__()
@@ -51,10 +51,12 @@ class MessageStream(Protocol):
                 self._inData=self._inData[length:]
                 self._handelData()
                 
-                    
-                
-    
-class MessageStreamClientFactory(ReconnectingClientFactory):
+
+class _MessageStreamClientFactory(ReconnectingClientFactory):
+    """
+    factory for MessageStreams from tcp
+    auto reconnects after dropped connections
+    """
     def __init__(self,out):
         self.out=out
         self.maxDelay=5
@@ -75,7 +77,7 @@ class MessageStreamClientFactory(ReconnectingClientFactory):
         
     def buildProtocol(self, addr):
         print 'Connected.'
-        return MessageStream(self)
+        return _MessageStream(self)
 
     def clientConnectionLost(self, connector, reason):
         print 'Lost connection.  Reason:', reason
@@ -86,10 +88,14 @@ class MessageStreamClientFactory(ReconnectingClientFactory):
         self.retry()
 
 TCPProtocolFactoryMap={
-    "rawTCP":MessageStreamClientFactory,
+    "rawTCP":_MessageStreamClientFactory,
     }
 
 def serverToMessageStream(server,out):
+    """
+    hook passed server up to output MessageStream
+    this chooses the correct connection factory based on the server's protocal
+    """
     protocol=server.protocal
     if protocol in TCPProtocolFactoryMap:
         fact=TCPProtocolFactoryMap[protocol](out)

@@ -22,15 +22,15 @@ func startServers(serverType string, serverList io.Reader, servers map[string]fu
 	bType := []byte(serverType)
 	r := bufio.NewReader(serverList)
 	sig, err := r.ReadString('\n')
-	print(sig)
-	line := ""
+	println(sig)
+	var line string
 	for err == nil {
 		line, err = r.ReadString('\n')
 		if len(line) > 1 {
 			//read columns
 			cols := bytes.Split([]byte(line), []byte(" "), 6)
 			if len(cols) != 6 {
-				print("bad line in serverList:", line)
+				println("bad line in serverList:", line)
 			} else {
 				if bytes.Compare(bType, cols[0]) == 0 {
 					// current line assigned to this server type, so start it
@@ -54,6 +54,8 @@ func httpLauncher(addr string, pattern string, handler func(http.ResponseWriter,
 		if !ok {
 			mux = http.NewServeMux()
 			go http.ListenAndServe(addr, mux)
+			httpHandlers[addr] = mux
+			println("adding http server for", addr)
 		}
 		mux.HandleFunc(pattern, handler)
 	}
@@ -64,13 +66,18 @@ func httpHandler(w http.ResponseWriter, r *http.Request) {
 	io.WriteString(w, string(serverList))
 }
 
+func statusHttpHandler(w http.ResponseWriter, r *http.Request) {
+	io.WriteString(w, "running")
+}
+
 
 func main() {
 	halt := make(chan int)
 	serverList, _ := os.Open("serverList.txt", os.O_RDONLY, 0)
 	servers := make(map[string]func([][]byte))
 	servers["Login"] = LaunchLoginServer
-	servers["ServerList"] = httpLauncher(":8080", "/serverList", httpHandler)
+	servers["ServerList"] = httpLauncher(":8080", "/ServerList", httpHandler)
+	servers["Status"] = httpLauncher(":8080", "/Status", statusHttpHandler)
 	startServers("master", serverList, servers)
 	_ = <-halt
 	println("Over")

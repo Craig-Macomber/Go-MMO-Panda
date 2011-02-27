@@ -25,15 +25,15 @@ class Node(object):
         
 
 class MessageStream(object):
-    def __init__(self):
-        self.handler=lambda data: None #throw away unhandled data
+    def __init__(self,handler=lambda data: None):
+        self.handler=handler
     def gotMessage(self,data):
         self.handler(data)
 
 def makeStreamMultiplexer(headerLength,handlerMap):
-        def handle(message):
-            handlerMap[message[:headerLength]](message[headerLength:])
-        return handle
+    def handle(message):
+        handlerMap[message[:headerLength]](message[headerLength:])
+    return MessageStream(handle)
 
 
 class StreamReceiver(Node):
