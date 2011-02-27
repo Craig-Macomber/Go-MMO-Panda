@@ -5,31 +5,73 @@ import (
 	"tcp"
 	"io"
 	"io/ioutil"
-	//"os"
+	"os"
+	"bufio"
+	"bytes"
 )
 
+var httpHandlers map[string] *http.ServeMux
 
-func httpHandler(w http.ResponseWriter, r *http.Request) {
-    serverList,_:=ioutil.ReadFile("serverList.txt")
-    loc:=r.URL.Path[1:]
-    if loc=="serverList"{
-        io.WriteString(w, string(serverList))
-    } else {
-        io.WriteString(w, "hello, world!\n"+loc)
+func init(){
+    httpHandlers=make(map[string] *http.ServeMux)
+}
+
+
+func startServers(serverType string, serverList io.Reader, servers map[string] func([][]byte)) {
+	// read serverList, and start servers that are assigned to this serverType
+	bType:=[]byte(serverType)
+	r:=bufio.NewReader(serverList)
+	sig,err:=r.ReadString('\n')
+	print(sig)
+	line:=""
+	for err==nil{
+		line,err=r.ReadString('\n')
+		if len(line)>1{
+			//read columns
+			cols:=bytes.Split([]byte(line),[]byte(" "),6)
+			if len(cols)!=6{
+				print("bad line in serverList:",line)
+			} else {
+				if bytes.Compare(bType,cols[0])==0 {
+					// current line assigned to this server type, so start it
+					name:=string(cols[1])
+					data:=cols[2:]
+					servers[name](data)
+				}
+			}
+		}
+	}
+}
+
+
+func LaunchLoginServer(data [][]byte){
+    tcp.SetupTCP()
+}
+
+func httpLauncher(addr string, pattern string, handler func(http.ResponseWriter,*http.Request)) func( [][]byte){
+    return func(data [][]byte){
+        mux,ok:=httpHandlers[addr]
+        if !ok {
+            mux=http.NewServeMux()
+            go http.ListenAndServe(addr, mux)
+        }
+        mux.HandleFunc(pattern,handler)
     }
 }
 
-func setupHttp() {
-    println("hosting http")
-	http.HandleFunc("/", httpHandler)
-	http.ListenAndServe(":8080", nil)
+func httpHandler(w http.ResponseWriter, r *http.Request) {
+    serverList,_:=ioutil.ReadFile("serverList.txt")
+    io.WriteString(w, string(serverList))
 }
+
 
 func main() {
     halt:=make(chan int)
-    tcp.SetupTCP()
-    go setupHttp()
-    
+	serverList,_:=os.Open("serverList.txt",os.O_RDONLY,0)
+	servers:=make(map[string] func([][]byte))
+	servers["Login"]=LaunchLoginServer
+	servers["ServerList"]=httpLauncher(":8080","/serverList",httpHandler)
+    startServers("master",serverList,servers)
     _ = <-halt
     println("Over")
 }

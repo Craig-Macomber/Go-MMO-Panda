@@ -37,7 +37,7 @@ class ServerList(HttpFile):
         self.servers={}
         for s in lines[1:]:
             t=s.split()
-            self.servers[t[0]]=Server(*t[:4])
+            self.servers[t[1]]=Server(*t[1:5])
         
         self.loaded()
         print "ServerList loaded"
@@ -63,7 +63,7 @@ class TestServer(KeyFrameBinDelta):
 
 root=Root()
 x=[]
-for i in range(20):
+for i in range(3):
     stream=MessageStream()
     testServer=TestServer(messageStream=stream)
     protocol.serverToMessageStream(root.serverList.servers["Login"],stream)

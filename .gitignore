@@ -3,3 +3,5 @@
 *.out
 *.6
 _obj
+Server/main
+*.go.swp
