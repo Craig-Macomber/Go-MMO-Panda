@@ -3,6 +3,10 @@ import struct
 
 import pack
 
+import protocol
+
+outEventTypeStruct=struct.Struct("<L")
+
 class Node(object):
     def __init__(self,loadCallbacks=None,**linkFields):
         self.linkFields=linkFields # How to connect to this node
@@ -11,7 +15,7 @@ class Node(object):
         self.loadCallBacks=[] if loadCallbacks is None else loadCallbacks
         
         self.forceUpdate()
-
+        
     def forceUpdate(self):
         self.isLoaded=False
         self.load()
@@ -35,20 +39,11 @@ def makeStreamMultiplexer(headerLength,handlerMap):
         handlerMap[message[:headerLength]](message[headerLength:])
     return MessageStream(handle)
 
+ 
 
-class StreamReceiver(Node):
-    def load(self):
-        self.stream=self.linkFields["messageStream"]
-        self.stream.handler=self.handleMessage
-        
-    def handleMessage(self,message): pass
-
-        
-
-class Parent(StreamReceiver):
+class Parent(Node):
     """ Branch of the tree, stream in, streams to children out, abstract """
     def load(self):
-        StreamReceiver.load(self)
         self.headFlag=self.linkFields["headFlag"]
     
     def handleMessage(self,message):
@@ -56,7 +51,7 @@ class Parent(StreamReceiver):
         if head==self.headFlag: #To me, not target
             self.handelCommand(message[1:])
         else: #send to target
-            self.target(message)
+            self.issueMessage(message)
             
     def handelCommand(self,message): pass #overload me
     def issueMessage(self,message): pass #overload me
@@ -122,17 +117,45 @@ class ListManager(Parent):
             
     
 
-#### Socket Nodes: Origins of MessageStream chains ####
+#### Socket Nodes: Connects to a server ####
 
 class SocketNode(Parent):
     """ Abstract class or origin of a MessageStream chains. A Socket Node """
-    def __init__(self,*args,**kargs):
-        self.out=MessageStream()
+    def __init__(self,server,child=None,*args,**kargs):
+        """
+        sendMessage should take a string and a boolean (queue) that
+        indicates if a message should be dropped or queued when not connected
+        """
+        self.messageStream=MessageStream(self.handleMessage)
+        self._sendMessage=protocol.serverToMessageStream(server,self.messageStream)
+        
         kargs["headFlag"]=0 # all sockets can have the same flag, so it might as well be 0
-        Node.__init__(self,*args,**kargs)
+        kargs["messageStream"]=self.messageStream
+        self.child=child
+        
+        
+        
+        Parent.__init__(self,*args,**kargs)
+
+    def sendEvent(self,type,data,queue=True):
+        """
+        only valid if constructed with a sendMessage
+        sends an event back to the server
+        """
+        self._sendMessage(outEventTypeStruct.pack(type)+data,queue)
+    
+    def syncBack(self,data):
+        """
+        only valid if constructed with a sendMessage
+        syncs the data back to the server to update it server side
+        """
+        self.sendEvent(0,data,False) # TODO : just sending sync as raw data event type 0. Could be more adaptive or more clear
+    
+
     def handelCommand(self,message): pass #overload me
-    def issueMessage(self,message): pass #overload me
-    def streamError(self): pass #overload me. Generally for lost or corrupt data removed at higher level
+    def issueMessage(self,message):
+        if self.child: self.child.handleMessage(message)
+    def streamError(self): self.child.streamError() #Generally for lost or corrupt data removed at higher level
     
     
     
@@ -146,9 +169,8 @@ class HttpFile(Node):
 
 ## RamSync Leaf Nodes ##
 
-class RamSync(StreamReceiver):
+class RamSync(Node):
     def load(self):
-        StreamReceiver.load(self)
         self.updatedCallbacks=[]
         
     def handleMessage(self,message):

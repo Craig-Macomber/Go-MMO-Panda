@@ -4,7 +4,20 @@ from sys import stdout
 
 import struct
 
-class _MessageStream(Protocol):
+
+class Server(object):
+    def __init__(self,name,address,port,protocal,key):
+        self.name=name
+        self.address=address
+        self.port=port
+        self.protocal=protocal
+        self.key=key
+        print "Server Loaded:",name,address,port,key
+    def httpAddress(self,location=""):
+        return self.address+":"+str(self.port)+"/"+location
+
+
+class _MessageStreamer(Protocol):
     def __init__(self,owner):
         self.owner=owner
         #Protocol.__init__()
@@ -18,6 +31,16 @@ class _MessageStream(Protocol):
         self._inData+=data
         self._handelData()
         
+    def connectionMade(self):
+        self.owner.connectionMade(self)
+    
+    def sendMessage(self,data):
+        datalen=len(data)+self._protocalHeader.size
+        lenCheck=self.Uint32OnesCompliment(1 + datalen)
+        header=self._protocalHeader.pack(datalen,lenCheck)
+        
+        self.transport.write(header+data)
+    
     def _handelData(self):
         maxMessageSize=10000
         maxBackLog=50000
@@ -62,6 +85,8 @@ class _MessageStreamClientFactory(ReconnectingClientFactory):
         self.maxDelay=5
         self.initialDelay=0.5
         self.connector=None
+        self.messageStreamer=None
+        self.messageQueue=[]
         
     def dataReceived(self, data):
         self.resetDelay() # clear the delay after sucessfully getting a message
@@ -77,16 +102,47 @@ class _MessageStreamClientFactory(ReconnectingClientFactory):
         
     def buildProtocol(self, addr):
         print 'Connected.'
-        return _MessageStream(self)
+        return _MessageStreamer(self)
 
     def clientConnectionLost(self, connector, reason):
+        self.messageStreamer=None
         print 'Lost connection.  Reason:', reason
         self.retry()
 
     def clientConnectionFailed(self, connector, reason):
+        self.messageStreamer=None
         print 'Connection failed. Reason:', reason
         self.retry()
-
+    
+    def connectionMade(self, messageStreamer):
+        self.messageStreamer=messageStreamer
+        self.processQueue()
+    
+    def sendMessage(self,data,queue=False):
+        """
+        if queue, messages will be stored if not connected and sent upon connection
+        dropping messages is not an error
+        """
+        if queue:
+            self.messageQueue.append(data)
+            self.processQueue()
+        else:
+            self.processQueue() # be sure to keep things in order
+            sendMessages([data])
+            
+    def processQueue(self):
+        failed=self.sendMessages(self.messageQueue)
+        if not failed: self.messageQueue=[]
+        
+    def sendMessages(self,messages):
+        """ returns true on fail (aka, not connected) """
+        if self.messageStreamer is not None:
+            for data in messages:
+                self.messageStreamer.sendMessage(data)
+            return False
+        else:
+            return True
+    
 TCPProtocolFactoryMap={
     "rawTCP":_MessageStreamClientFactory,
     }
@@ -95,10 +151,12 @@ def serverToMessageStream(server,out):
     """
     hook passed server up to output MessageStream
     this chooses the correct connection factory based on the server's protocal
+    returns factory's sendMessage(self,data,queue=False) method for sending data to server.
     """
     protocol=server.protocal
     if protocol in TCPProtocolFactoryMap:
         fact=TCPProtocolFactoryMap[protocol](out)
         connector = reactor.connectTCP(server.address, int(server.port), fact)
+        return fact.sendMessage
     else:
         print 'Unsupported Protocal "'+protocal+'" failed to connect to "'+server.name+'"'

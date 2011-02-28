@@ -1,9 +1,9 @@
 from twisted.internet import reactor
 
-from clientNodes import Node, HttpFile, MessageStream, KeyFrameBinDelta, RamSync
+import clientNodes
 import protocol
 
-class Root(Node):
+class Root(clientNodes.Node):
     def load(self):
         print "Loading Root"
         
@@ -12,20 +12,20 @@ class Root(Node):
         self.masterServerAddress="http://127.0.0.1"
         
         # load subnode, the serverList
-        masterServer=Server("master",self.masterServerAddress,8080,"http",self.masterPublicKey)
+        masterServer=protocol.Server("master",self.masterServerAddress,8080,"http",self.masterPublicKey)
         
         self.serverList=ServerList(address=masterServer.httpAddress("ServerList"),
             key=masterServer.key,
             loadCallBacks=[self.loaded])
 
     def loaded(self):
-        Node.loaded(self)
+        clientNodes.Node.loaded(self)
         print "root loaded"
 
-class ServerList(HttpFile):
+class ServerList(clientNodes.HttpFile):
     def load(self):
         print "Loading Server List"
-        HttpFile.load(self,skipLoaded=False)
+        clientNodes.HttpFile.load(self,skipLoaded=False)
         
         # if read failed, should report it here, and use version from local cache
         
@@ -35,40 +35,48 @@ class ServerList(HttpFile):
        
         # parse listText
         lines=self.fileText.splitlines()
-        print lines
         self.servers={}
         for s in lines[1:]:
             t=s.split()
-            self.servers[t[1]]=Server(*t[1:6])
+            self.servers[t[1]]=protocol.Server(*t[1:6])
         
         self.loaded()
         print "ServerList loaded"
         
-class Server(object):
-    def __init__(self,name,address,port,protocal,key):
-        self.name=name
-        self.address=address
-        self.port=port
-        self.protocal=protocal
-        self.key=key
-        print "Server Loaded:",name,address,port,key
-    def httpAddress(self,location=""):
-        return self.address+":"+str(self.port)+"/"+location
-        
-class TestServer(KeyFrameBinDelta):
+class TestServer(clientNodes.KeyFrameBinDelta):
     def load(self): 
-        KeyFrameBinDelta.load(self)
+        clientNodes.KeyFrameBinDelta.load(self)
         self.updatedCallbacks.append(self.handelUpdate)
     def handelUpdate(self):
-        pass#print "Got Update: "#+self.data
+        print "Got Update: "#+self.data
+
+
+# need to make login not try and auto reconnect if login fails (perhaps some sort of time out too)
+# and login after disconnects if login suceeded
+class LoggedInSocket(clientNodes.SocketNode):
+    def load(self): 
+        clientNodes.SocketNode.load(self)
+        
+        userName="Test"
+        password="12345"
+        self.sendEvent(1,userName)
+        self.sendEvent(2,password)
+        
+        self.loggedIn=False
+        
+    def handelCommand(self,message):
+        head=ord(message[0])
+        self.loggedIn=head==0 # 0 means login sucess
+        self.loaded()
+            
 
 root=Root()
 x=[]
 for i in range(3):
-    stream=MessageStream()
-    testServer=TestServer(messageStream=stream)
-    protocol.serverToMessageStream(root.serverList.servers["Login"],stream)
+    testServer=TestServer()
+    server=root.serverList.servers["Login"]
+    socketNode=LoggedInSocket(server,testServer)
     x.append(testServer)
-
+    #socketNode.sendEvent(1,"Test")
 
 reactor.run()
