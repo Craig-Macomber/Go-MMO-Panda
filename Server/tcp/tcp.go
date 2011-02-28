@@ -65,6 +65,28 @@ func (c *Connected) Disconnect(reason Error, err os.Error) {
 	fmt.Println("Disconnecting", c.Conn.RemoteAddr(), reason, err)
 }
 
+func (c *Connected) SendMessage(data []byte) (failed bool) {
+	length := uint32(len(data) + 8)
+	lengthCheck := ^(1 + length)
+
+	header := make([]byte, 8)
+	for i := uint(0); i < 4; i++ {
+		header[i] = byte(length >> (i * 8))
+		header[i+4] = byte(lengthCheck >> (i * 8))
+	}
+	_, err := c.Conn.Write(header)
+	if err == nil {
+		_, err = c.Conn.Write(data)
+	}
+
+	if err != nil {
+		c.Disconnect(ConnectionError, err)
+		return true
+	}
+	return false
+}
+
+
 func newConnected(con net.Conn) *Connected {
 	in := make(chan []byte)
 	c := &Connected{con, in}
@@ -157,37 +179,15 @@ func updateLoop(bag *IterBag) {
 		zlibw.Write(toSend)
 		zlibw.Close()
 
-		length := uint32(buff.Len() + 8)
-		compLen := ^(1 + length)
-
-		header := make([]byte, 8)
-		for i := uint(0); i < 4; i++ {
-			header[i] = byte(length >> (i * 8))
-			header[i+4] = byte(compLen >> (i * 8))
-		}
-
 		buffBytes := buff.Bytes()
 
 		iter := bag.NewIterator()
 		for ; iter.Current != nil; iter.Iter() {
-			//println("con")
-			/*
-				(*(iter.Current.Conn)).SetReadTimeout(1)
-				inData:=make([]byte,100)
-				inNum, _ := (*(iter.Current.Conn)).Read(inData)
+			failed := iter.Current.SendMessage(buffBytes)
 
-				println("message in:",inNum,":",string(inData[12:]))
-			*/
-			_, err := iter.Current.Conn.Write(header)
-			if err == nil {
-				_, err = iter.Current.Conn.Write(buffBytes)
-			}
-
-			if err != nil {
-				println(err.String())
+			if failed {
 				iter.Remove()
 				iter.GoBack()
-				println("removed a connection")
 			}
 		}
 		time.Sleep(500000000)
