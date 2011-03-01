@@ -14,12 +14,17 @@ import (
 )
 
 
-func wait(ns int64, halt <-chan int) (halted bool) {
+func makeWaitChan(ns int64) <-chan int {
 	waitChan := make(chan int)
 	go func() {
 		time.Sleep(ns)
 		close(waitChan)
 	}()
+	return waitChan
+}
+
+func wait(ns int64, halt <-chan int) (halted bool) {
+	waitChan := makeWaitChan(ns)
 	select {
 	case _ = <-waitChan:
 		halted = false
@@ -31,7 +36,7 @@ func wait(ns int64, halt <-chan int) (halted bool) {
 
 func getConnections(listener net.Listener, out chan<- net.Conn) {
 	for {
-		println("listener listening")
+		//println("listener listening")
 		con, err := listener.Accept()
 		if err == nil {
 			select {
@@ -39,6 +44,7 @@ func getConnections(listener net.Listener, out chan<- net.Conn) {
 			//                 close(out)
 			//                 return
 			case out <- con:
+				//println("Connection gotten")
 			}
 		} else {
 			println(err.String())
@@ -49,7 +55,6 @@ func getConnections(listener net.Listener, out chan<- net.Conn) {
 
 type Connected struct {
 	Conn net.Conn
-	In   <-chan []byte
 }
 
 type Error int
@@ -61,7 +66,6 @@ const (
 
 func (c *Connected) Disconnect(reason Error, err os.Error) {
 	c.Conn.Close()
-	close(c.In)
 	fmt.Println("Disconnecting", c.Conn.RemoteAddr(), reason, err)
 }
 
@@ -86,66 +90,63 @@ func (c *Connected) SendMessage(data []byte) (failed bool) {
 	return false
 }
 
-
-func newConnected(con net.Conn) *Connected {
-	in := make(chan []byte)
-	c := &Connected{con, in}
-	//con.SetReadTimeout(1e9) // 1 second time out
-	go func() {
-		// read messages from con to in
-		var length uint32
-		var lengthCheck uint32
-		var err os.Error = nil
-		for {
-			err = binary.Read(con, binary.LittleEndian, &length)
-			if err != nil {
-				break
-			}
-			err = binary.Read(con, binary.LittleEndian, &lengthCheck)
-			if err != nil {
-				break
-			}
-
+func (c *Connected) ReadMessage() (data []byte, failed bool) { 
+	var length uint32
+	var lengthCheck uint32
+	err := binary.Read(c.Conn, binary.LittleEndian, &length)
+	if err == nil {
+		err = binary.Read(c.Conn, binary.LittleEndian, &lengthCheck)
+		if err == nil {
 			if lengthCheck != ^(1 + length) {
 				c.Disconnect(InvalidHeader, nil)
 				return
 			}
-
+		
 			data := make([]byte, length-8)
-			_, err = con.Read(data)
+			_, err = c.Conn.Read(data)
 			if err == nil {
-				//fmt.Println("Got Data:", string(data))
-				in <- data
-			} else {
-				break
+				return data, false
 			}
 		}
-		c.Disconnect(ConnectionError, err)
-	}()
+	}
+	
+	c.Disconnect(ConnectionError, err)
+	return nil,true
+
+}
+func newConnected(con net.Conn) *Connected {
+	c := &Connected{con}
 	return c
 }
 
 func connector(in <-chan net.Conn, out chan<- *Connected) {
 	for c := range in {
-		println("Adding newConnected")
+		//println("Adding newConnected")
 		out <- newConnected(c)
 	}
 	close(out)
 }
 
 
-func welcomTestLoop(in <-chan *Connected, bag *IterBag) {
-	for c := range in {
-		go func() {
-			name := <-c.In
-			password := <-c.In
-			fmt.Println("Login:", string(name[1:]), string(password[1:]))
-			bag.Add(*c)
-		}()
+func login(c *Connected, out chan<- *Connected){
+	name,fail := c.ReadMessage()
+	password,fail := c.ReadMessage()
+	if !fail {
+		fmt.Println("Login:",name[0],password[0], string(name[1:]), string(password[1:]))
+		out<-c
+	} else {
+		fmt.Println("LOGIN FAIL")
 	}
 }
 
-func updateLoop(bag *IterBag) {
+func welcomTestLoop(in <-chan *Connected, out chan<- *Connected) {
+	for c := range in {
+		go login(c,out)
+	}
+}
+
+func updateLoop(in <-chan *Connected) {
+	bag := NewIterBag()
 	const size = 100
 	data := make([]byte, size)
 
@@ -157,6 +158,19 @@ func updateLoop(bag *IterBag) {
 	xOrData := make([]byte, size)
 	frameCount := 0
 	for {
+		
+		// Add any new connections
+		waitChan := makeWaitChan(500000000)
+		L: for {
+			select {
+			case newCon := <-in:
+				bag.Add(*newCon)
+			case _ = <-waitChan:
+				break L
+			}
+		}
+		
+		
 		frameCount++
 		if frameCount%1 == 0 {
 			println(frameCount, " - ", bag.Length())
@@ -180,24 +194,27 @@ func updateLoop(bag *IterBag) {
 		zlibw.Close()
 
 		buffBytes := buff.Bytes()
-
-		iter := bag.NewIterator()
-		for ; iter.Current != nil; iter.Iter() {
+		
+		for iter := bag.NewIterator(); iter.Current != nil; iter.Iter() {
 			failed := iter.Current.SendMessage(buffBytes)
 
 			if failed {
 				iter.Remove()
 				iter.GoBack()
+				fmt.Println("Removing from Bag")
 			}
 		}
-		time.Sleep(500000000)
+		//time.Sleep(500000000)
 	}
 }
 
 func SetupTCP() {
 	println("Setting Up TCP")
-	const connectedAndWaitingMax = 4
+	const connectedAndWaitingMax = 0
 	conChan := make(chan net.Conn, connectedAndWaitingMax)
+	
+	
+	
 	listener, err := net.Listen("tcp", "127.0.0.1:6666")
 	if err != nil {
 		println(err)
@@ -205,13 +222,14 @@ func SetupTCP() {
 
 	go getConnections(listener, conChan)
 
-	connectedChan := make(chan *Connected)
-
+	connectedChan := make(chan *Connected, connectedAndWaitingMax)
+	conChan2 := make(chan *Connected, connectedAndWaitingMax)
+	
 	go connector(conChan, connectedChan)
 
-	bag := NewIterBag()
-	go welcomTestLoop(connectedChan, bag)
-	go updateLoop(bag)
+	
+	go welcomTestLoop(connectedChan, conChan2)
+	go updateLoop(conChan2)
 
 	println("TCP Setup")
 
