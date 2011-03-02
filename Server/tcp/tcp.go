@@ -3,9 +3,6 @@ package tcp
 import (
 	"time"
 	"net"
-	//"/iterBag"
-	//"io"
-	//"io/ioutil"
 	"bytes"
 	"compress/zlib"
 	"encoding/binary"
@@ -34,20 +31,18 @@ func wait(ns int64, halt <-chan int) (halted bool) {
 	return
 }
 
-func getConnections(listener net.Listener, out chan<- net.Conn) {
+func getConnections(listener net.Listener, out chan<- net.Conn, halt <-chan int) {
 	for {
-		//println("listener listening")
 		con, err := listener.Accept()
 		if err == nil {
 			select {
-			//             case _ = <- halt:
-			//                 close(out)
-			//                 return
+			case _ = <-halt:
+				close(out)
+				return
 			case out <- con:
-				//println("Connection gotten")
 			}
 		} else {
-			println(err.String())
+			println("listener.Accept error:", err.String())
 			time.Sleep(100000000) //some error trying to get a socket, so wait before retry
 		}
 	}
@@ -90,7 +85,7 @@ func (c *Connected) SendMessage(data []byte) (failed bool) {
 	return false
 }
 
-func (c *Connected) ReadMessage() (data []byte, failed bool) { 
+func (c *Connected) ReadMessage() (data []byte, failed bool) {
 	var length uint32
 	var lengthCheck uint32
 	err := binary.Read(c.Conn, binary.LittleEndian, &length)
@@ -101,7 +96,7 @@ func (c *Connected) ReadMessage() (data []byte, failed bool) {
 				c.Disconnect(InvalidHeader, nil)
 				return
 			}
-		
+
 			data := make([]byte, length-8)
 			_, err = c.Conn.Read(data)
 			if err == nil {
@@ -109,9 +104,9 @@ func (c *Connected) ReadMessage() (data []byte, failed bool) {
 			}
 		}
 	}
-	
+
 	c.Disconnect(ConnectionError, err)
-	return nil,true
+	return nil, true
 
 }
 func newConnected(con net.Conn) *Connected {
@@ -119,30 +114,22 @@ func newConnected(con net.Conn) *Connected {
 	return c
 }
 
-func connector(in <-chan net.Conn, out chan<- *Connected) {
-	for c := range in {
-		//println("Adding newConnected")
-		out <- newConnected(c)
-	}
-	close(out)
-}
-
-
-func login(c *Connected, out chan<- *Connected){
-	name,fail := c.ReadMessage()
-	password,fail := c.ReadMessage()
+func login(c *Connected, out chan<- *Connected) {
+	name, fail := c.ReadMessage()
+	password, fail := c.ReadMessage()
 	if !fail {
-		fmt.Println("Login:",name[0],password[0], string(name[1:]), string(password[1:]))
-		out<-c
+		fmt.Println("Login:", name[0], password[0], string(name[1:]), string(password[1:]))
+		out <- c
 	} else {
 		fmt.Println("LOGIN FAIL")
 	}
 }
 
-func welcomTestLoop(in <-chan *Connected, out chan<- *Connected) {
+func welcomTestLoop(in <-chan net.Conn, out chan<- *Connected) {
 	for c := range in {
-		go login(c,out)
+		go login(newConnected(c), out)
 	}
+	close(out)
 }
 
 func updateLoop(in <-chan *Connected) {
@@ -158,19 +145,24 @@ func updateLoop(in <-chan *Connected) {
 	xOrData := make([]byte, size)
 	frameCount := 0
 	for {
-		
+
 		// Add any new connections
 		waitChan := makeWaitChan(500000000)
-		L: for {
+	L:
+		for {
 			select {
 			case newCon := <-in:
-				bag.Add(*newCon)
+				if newCon == nil {
+					// in is closed!
+					break L
+				} else {
+					bag.Add(*newCon)
+				}
 			case _ = <-waitChan:
 				break L
 			}
 		}
-		
-		
+
 		frameCount++
 		if frameCount%1 == 0 {
 			println(frameCount, " - ", bag.Length())
@@ -194,7 +186,7 @@ func updateLoop(in <-chan *Connected) {
 		zlibw.Close()
 
 		buffBytes := buff.Bytes()
-		
+
 		for iter := bag.NewIterator(); iter.Current != nil; iter.Iter() {
 			failed := iter.Current.SendMessage(buffBytes)
 
@@ -204,7 +196,6 @@ func updateLoop(in <-chan *Connected) {
 				fmt.Println("Removing from Bag")
 			}
 		}
-		//time.Sleep(500000000)
 	}
 }
 
@@ -212,23 +203,18 @@ func SetupTCP() {
 	println("Setting Up TCP")
 	const connectedAndWaitingMax = 0
 	conChan := make(chan net.Conn, connectedAndWaitingMax)
-	
-	
-	
+	halt := make(chan int)
+
 	listener, err := net.Listen("tcp", "127.0.0.1:6666")
 	if err != nil {
 		println(err)
 	}
 
-	go getConnections(listener, conChan)
+	go getConnections(listener, conChan, halt)
 
-	connectedChan := make(chan *Connected, connectedAndWaitingMax)
 	conChan2 := make(chan *Connected, connectedAndWaitingMax)
-	
-	go connector(conChan, connectedChan)
 
-	
-	go welcomTestLoop(connectedChan, conChan2)
+	go welcomTestLoop(conChan, conChan2)
 	go updateLoop(conChan2)
 
 	println("TCP Setup")
