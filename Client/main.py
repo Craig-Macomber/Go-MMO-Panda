@@ -1,3 +1,6 @@
+# from twisted.internet import pollreactor
+# pollreactor.install()
+
 from twisted.internet import reactor
 
 import clientNodes
@@ -48,7 +51,7 @@ class TestServer(clientNodes.KeyFrameBinDelta):
         clientNodes.KeyFrameBinDelta.load(self)
         self.updatedCallbacks.append(self.handelUpdate)
     def handelUpdate(self):
-        print "Got Update: "#+self.data
+        pass#print "Got Update: "#+self.data
 
 
 # need to make login not try and auto reconnect if login fails (perhaps some sort of time out too)
@@ -61,18 +64,19 @@ class LoggedInSocket(clientNodes.SocketNode):
         password="12345"
         self.sendEvent(1,userName)
         self.sendEvent(2,password)
-        
+
         self.loggedIn=False
         
     def handelCommand(self,message):
         head=ord(message[0])
         self.loggedIn=head==0 # 0 means login sucess
+        print "login",self.loggedIn
         self.loaded()
             
 
 root=Root()
 x=[]
-for i in range(3):
+for i in range(1):
     testServer=TestServer()
     server=root.serverList.servers["Login"]
     socketNode=LoggedInSocket(server,testServer)

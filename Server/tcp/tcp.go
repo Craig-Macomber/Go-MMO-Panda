@@ -8,6 +8,7 @@ import (
 	"encoding/binary"
 	"os"
 	"fmt"
+	"crypto/tls"
 )
 
 
@@ -34,7 +35,14 @@ func wait(ns int64, halt <-chan int) (halted bool) {
 func getConnections(listener net.Listener, out chan<- net.Conn, halt <-chan int) {
 	for {
 		con, err := listener.Accept()
+		println("listener.Accept")
 		if err == nil {
+			/*
+fmt.Println("Handshake start")
+			err=con.(*tls.Conn).Handshake()
+			fmt.Println("Handshake err:",err)
+*/
+
 			select {
 			case _ = <-halt:
 				close(out)
@@ -115,14 +123,20 @@ func newConnected(con net.Conn) *Connected {
 }
 
 func login(c *Connected, out chan<- *Connected) {
+	c.Conn.SetReadTimeout(10)
+	c.Conn.SetTimeout(10)
+	//fmt.Println(c.Conn.(*tls.Conn).ConnectionState())
 	name, fail := c.ReadMessage()
-	password, fail := c.ReadMessage()
-	if !fail {
-		fmt.Println("Login:", name[0], password[0], string(name[1:]), string(password[1:]))
-		out <- c
-	} else {
-		fmt.Println("LOGIN FAIL")
+	if !fail{
+		password, fail := c.ReadMessage()
+		if !fail {
+			fmt.Println("Login:", name[0], password[0], string(name[1:]), string(password[1:]))
+			out <- c
+			return
+		}
 	}
+	
+	fmt.Println("LOGIN FAIL")
 }
 
 func welcomTestLoop(in <-chan net.Conn, out chan<- *Connected) {
@@ -199,13 +213,28 @@ func updateLoop(in <-chan *Connected) {
 	}
 }
 
-func SetupTCP() {
-	println("Setting Up TCP")
+func SetupTCP(useTls bool,address string) {
+	println("Setting Up TCP at:",address)
 	const connectedAndWaitingMax = 0
 	conChan := make(chan net.Conn, connectedAndWaitingMax)
 	halt := make(chan int)
-
-	listener, err := net.Listen("tcp", "127.0.0.1:6666")
+	
+	var listener net.Listener
+	var err os.Error
+	if useTls{
+		certs:=make([]tls.Certificate,1)
+		c0,errx:=tls.LoadX509KeyPair("cert/cert.pem", "cert/key.pem")
+		certs[0]=c0
+		fmt.Println(errx)
+		config:=tls.Config{Certificates:certs,ServerName:"TestServer"}
+		listener, err = tls.Listen("tcp", ":6666",&config)
+		println("TLS")
+	} else {
+		listener, err = net.Listen("tcp", ":6666")
+		println("TCP")
+	}
+	
+	
 	if err != nil {
 		println(err)
 	}

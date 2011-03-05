@@ -1,6 +1,7 @@
 from twisted.internet.protocol import Protocol, ReconnectingClientFactory
-from twisted.internet import reactor
+from twisted.internet import reactor, ssl
 from sys import stdout
+from OpenSSL import SSL
 
 import struct
 
@@ -80,6 +81,7 @@ class _MessageStreamClientFactory(ReconnectingClientFactory):
     factory for MessageStreams from tcp
     auto reconnects after dropped connections
     """
+    conType="TCP"
     def __init__(self,out):
         self.out=out
         self.maxDelay=5
@@ -142,10 +144,29 @@ class _MessageStreamClientFactory(ReconnectingClientFactory):
             return False
         else:
             return True
-    
+
+
+class factTSL(_MessageStreamClientFactory):
+    conType="TLS"
+
 TCPProtocolFactoryMap={
     "rawTCP":_MessageStreamClientFactory,
+    "tlsRawTCP":factTSL,
     }
+
+
+class ClientTLSContext(ssl.ClientContextFactory):
+    isClient = 1
+    def getContext(self):
+        #return SSL.Context(SSL.TLSv1_METHOD)
+        self.method = SSL.SSLv23_METHOD
+        ctx = ssl.ClientContextFactory.getContext(self)
+        ctx.use_certificate_file('../Server/cert/cert.pem')
+        #ctx.use_privatekey_file('../Server/cert/private.pem')
+
+        return ctx
+        
+
 
 def serverToMessageStream(server,out):
     """
@@ -154,9 +175,17 @@ def serverToMessageStream(server,out):
     returns factory's sendMessage(self,data,queue=False) method for sending data to server.
     """
     protocol=server.protocal
+    
     if protocol in TCPProtocolFactoryMap:
-        fact=TCPProtocolFactoryMap[protocol](out)
-        connector = reactor.connectTCP(server.address, int(server.port), fact)
+        fact=TCPProtocolFactoryMap[protocol]
+        conType=fact.conType
+        fact=fact(out)
+        if conType=="TLS":
+            connector = reactor.connectSSL(server.address, int(server.port), fact, ClientTLSContext())
+        elif conType=="TCP":
+            connector = reactor.connectTCP(server.address, int(server.port), fact)
+        else:
+            print 'Unsupported conType "'+conType+'" failed to connect to "'+server.name+'"'
         return fact.sendMessage
     else:
-        print 'Unsupported Protocal "'+protocal+'" failed to connect to "'+server.name+'"'
+        print 'Unsupported Protocal "'+protocol+'" failed to connect to "'+server.name+'"'

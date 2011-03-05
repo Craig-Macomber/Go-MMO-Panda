@@ -45,11 +45,18 @@ func startServers(serverType string, serverList io.Reader, servers map[string]fu
 
 
 func LaunchLoginServer(data [][]byte) {
-	tcp.SetupTCP()
+    protocal:=string(data[2])
+    address:=":"+string(data[1])
+    if protocal=="tlsRawTCP"{
+	    tcp.SetupTCP(true,address)
+    } else if protocal=="rawTCP" {
+        tcp.SetupTCP(false,address)
+    }
 }
 
-func httpLauncher(addr string, pattern string, handler func(http.ResponseWriter, *http.Request)) func([][]byte) {
+func httpLauncher(pattern string, handler func(http.ResponseWriter, *http.Request)) func([][]byte) {
 	return func(data [][]byte) {
+		addr:=":"+string(data[1])
 		mux, ok := httpHandlers[addr]
 		if !ok {
 			mux = http.NewServeMux()
@@ -76,8 +83,8 @@ func main() {
 	serverList, _ := os.Open("serverList.txt", os.O_RDONLY, 0)
 	servers := make(map[string]func([][]byte))
 	servers["Login"] = LaunchLoginServer
-	servers["ServerList"] = httpLauncher(":8080", "/ServerList", httpHandler)
-	servers["Status"] = httpLauncher(":8080", "/Status", statusHttpHandler)
+	servers["ServerList"] = httpLauncher("/ServerList", httpHandler)
+	servers["Status"] = httpLauncher("/Status", statusHttpHandler)
 	startServers("master", serverList, servers)
 	_ = <-halt
 	println("Over")
