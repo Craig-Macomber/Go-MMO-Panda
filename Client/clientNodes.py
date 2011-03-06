@@ -3,9 +3,7 @@ import struct
 
 import pack
 
-import protocol
 
-outEventTypeStruct=struct.Struct("<L")
 
 class Node(object):
     def __init__(self,loadCallbacks=None,**linkFields):
@@ -139,43 +137,6 @@ class ListManager(Parent):
         self.childrenUpToDate=False
             
     
-
-#### Socket Nodes: Connects to a server ####
-
-class SocketNode(Parent):
-    """ Abstract class or origin of a MessageStream chains. A Socket Node """
-    def __init__(self,server,*args,**kargs):
-        """
-        sendMessage should take a string and a boolean (queue) that
-        indicates if a message should be dropped or queued when not connected
-        """
-        self.messageStream=MessageStream(self.handleMessage)
-        self._sendMessage=protocol.serverToMessageStream(server,self.messageStream)
-        
-        kargs["headFlag"]=0 # all sockets can have the same flag, so it might as well be 0
-        kargs["messageStream"]=self.messageStream
-        
-        Parent.__init__(self,*args,**kargs)
-
-    def sendEvent(self,type,data,queue=True):
-        """
-        only valid if constructed with a sendMessage
-        sends an event back to the server
-        """
-        self._sendMessage(outEventTypeStruct.pack(type)+data,queue)
-    
-    def syncBack(self,data):
-        """
-        only valid if constructed with a sendMessage
-        syncs the data back to the server to update it server side
-        """
-        self.sendEvent(0,data,False) # TODO : just sending sync as raw data event type 0. Could be more adaptive or more clear
-    
-    def streamError(self): self.child.streamError() #Generally for lost or corrupt data removed at higher level
-    
-    
-    
-
 
 
 class HttpFile(Node):

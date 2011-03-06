@@ -5,13 +5,16 @@ from OpenSSL import SSL
 
 import struct
 
+outEventTypeStruct=struct.Struct("<L")
+
+import clientNodes
 
 class Server(object):
-    def __init__(self,name,address,port,protocal,key):
+    def __init__(self,name,address,port,protocol,key):
         self.name=name
         self.address=address
         self.port=port
-        self.protocal=protocal
+        self.protocol=protocol
         self.key=key
         print "Server Loaded:",name,address,port,key
     def httpAddress(self,location=""):
@@ -76,23 +79,58 @@ class _MessageStreamer(Protocol):
                 self._handelData()
                 
 
-class _MessageStreamClientFactory(ReconnectingClientFactory):
+#### Socket Nodes: Connects to a server ####
+
+class SocketNode(clientNodes.Parent,ReconnectingClientFactory):
     """
-    factory for MessageStreams from tcp
     auto reconnects after dropped connections
     """
-    conType="TCP"
-    def __init__(self,out):
-        self.out=out
+    def __init__(self,server,*args,**kargs):
+        """
+        sendMessage should take a string and a boolean (queue) that
+        indicates if a message should be dropped or queued when not connected
+        """
+        
+        kargs["headFlag"]=0 # all sockets can have the same flag, so it might as well be 0
+        
+        
         self.maxDelay=5
         self.initialDelay=0.5
         self.connector=None
         self.messageStreamer=None
         self.messageQueue=[]
         
+        clientNodes.Parent.__init__(self,*args,**kargs)
+        
+        if server.protocol=="rawTCP":
+            reactor.connectTCP(server.address, int(server.port), self)
+        elif server.protocol=="tlsRawTCP":
+            connector = reactor.connectSSL(server.address, int(server.port), fact, ClientTLSContext())
+        else:
+            print 'Unsupported protocol "'+server.protocol+'" failed to connect to "'+server.name+'"'
+        
+        
+        
+        
+        
+
+    def sendEvent(self,type,data,queue=True):
+        """
+        sends an event back to the server
+        """
+        self.sendMessage(outEventTypeStruct.pack(type)+data,queue)
+    
+    def streamError(self): self.child.streamError() #Generally for lost or corrupt data removed at higher level
+    def connected(self):pass # for initial connections and reconnects.
+    
+
+
+
+
+        
     def dataReceived(self, data):
         self.resetDelay() # clear the delay after sucessfully getting a message
-        self.out.gotMessage(data)
+        self.handleMessage(data)
     
     def disconnect(self):
         """ disconnect, which will lead to auto reconnect unless prevented"""
@@ -118,6 +156,7 @@ class _MessageStreamClientFactory(ReconnectingClientFactory):
     
     def connectionMade(self, messageStreamer):
         self.messageStreamer=messageStreamer
+        self.connected()
         self.processQueue()
     
     def sendMessage(self,data,queue=False):
@@ -146,15 +185,6 @@ class _MessageStreamClientFactory(ReconnectingClientFactory):
             return True
 
 
-class factTSL(_MessageStreamClientFactory):
-    conType="TLS"
-
-TCPProtocolFactoryMap={
-    "rawTCP":_MessageStreamClientFactory,
-    "tlsRawTCP":factTSL,
-    }
-
-
 class ClientTLSContext(ssl.ClientContextFactory):
     isClient = 1
     def getContext(self):
@@ -165,27 +195,3 @@ class ClientTLSContext(ssl.ClientContextFactory):
         #ctx.use_privatekey_file('../Server/cert/private.pem')
 
         return ctx
-        
-
-
-def serverToMessageStream(server,out):
-    """
-    hook passed server up to output MessageStream
-    this chooses the correct connection factory based on the server's protocal
-    returns factory's sendMessage(self,data,queue=False) method for sending data to server.
-    """
-    protocol=server.protocal
-    
-    if protocol in TCPProtocolFactoryMap:
-        fact=TCPProtocolFactoryMap[protocol]
-        conType=fact.conType
-        fact=fact(out)
-        if conType=="TLS":
-            connector = reactor.connectSSL(server.address, int(server.port), fact, ClientTLSContext())
-        elif conType=="TCP":
-            connector = reactor.connectTCP(server.address, int(server.port), fact)
-        else:
-            print 'Unsupported conType "'+conType+'" failed to connect to "'+server.name+'"'
-        return fact.sendMessage
-    else:
-        print 'Unsupported Protocal "'+protocol+'" failed to connect to "'+server.name+'"'

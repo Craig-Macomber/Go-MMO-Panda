@@ -61,9 +61,9 @@ class EventCatcher(clientNodes.Node):
 
 # need to make login not try and auto reconnect if login fails (perhaps some sort of time out too)
 # and login after disconnects if login suceeded
-class LoggedInSocket(clientNodes.SocketNode):
+class LoggedInSocket(protocol.SocketNode):
     def load(self): 
-        clientNodes.SocketNode.load(self)
+        protocol.SocketNode.load(self)
         
         userName="Test"
         password="12345"
