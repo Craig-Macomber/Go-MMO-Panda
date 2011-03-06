@@ -51,7 +51,12 @@ class TestServer(clientNodes.KeyFrameBinDelta):
         clientNodes.KeyFrameBinDelta.load(self)
         self.updatedCallbacks.append(self.handelUpdate)
     def handelUpdate(self):
-        pass#print "Got Update: "#+self.data
+        print "Got Update: ",len(self.data),self.data
+
+class EventCatcher(clientNodes.Node):
+    def handelMessage(self,message):
+        data=message[1:]
+        print "Event: "+data
 
 
 # need to make login not try and auto reconnect if login fails (perhaps some sort of time out too)
@@ -72,14 +77,16 @@ class LoggedInSocket(clientNodes.SocketNode):
         self.loggedIn=head==0 # 0 means login sucess
         print "login",self.loggedIn
         self.loaded()
-            
 
 root=Root()
 x=[]
 for i in range(1):
     testServer=TestServer()
+    eventCatcher=EventCatcher()
     server=root.serverList.servers["Login"]
-    socketNode=LoggedInSocket(server,testServer)
+    socketNode=LoggedInSocket(server)
+    socketNode.addChild(testServer,1)
+    socketNode.addChild(eventCatcher,2)
     x.append(testServer)
     #socketNode.sendEvent(1,"Test")
 

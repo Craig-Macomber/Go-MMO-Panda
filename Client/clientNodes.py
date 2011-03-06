@@ -42,19 +42,42 @@ def makeStreamMultiplexer(headerLength,handlerMap):
  
 
 class Parent(Node):
-    """ Branch of the tree, stream in, streams to children out, abstract """
+    """ Branch of the tree, stream in, streams to children out
+    
+    unless overwritten, streams messages to children based on
+    first byte of message, headFlag
+    redirects message stream when ever a recognized headFlag comes by.
+    """
+    
+    
     def load(self):
         self.headFlag=self.linkFields["headFlag"]
+        self.children={}
+        self.lastFlag=self.headFlag
+        
+    def addChild(self,node,headFlag):
+        self.children[headFlag]=node
     
     def handleMessage(self,message):
         head=ord(message[0])
         if head==self.headFlag: #To me, not target
+            self.lastFlag=self.headFlag
             self.handelCommand(message[1:])
         else: #send to target
             self.issueMessage(message)
             
     def handelCommand(self,message): pass #overload me
-    def issueMessage(self,message): pass #overload me
+    def issueMessage(self,message):
+        head=ord(message[0])
+        if head in self.children:
+            self.lastFlag=head
+            self.children[head].handleMessage(message)
+        else:
+            if self.lastFlag!=self.headFlag:
+                self.children[lastFlag].handleMessage(message)
+            else:
+                print "Dropping message with no target",head
+        
     def streamError(self): pass #overload me. Generally for lost or corrupt data removed at higher level
     
 class ListManager(Parent):
@@ -121,7 +144,7 @@ class ListManager(Parent):
 
 class SocketNode(Parent):
     """ Abstract class or origin of a MessageStream chains. A Socket Node """
-    def __init__(self,server,child=None,*args,**kargs):
+    def __init__(self,server,*args,**kargs):
         """
         sendMessage should take a string and a boolean (queue) that
         indicates if a message should be dropped or queued when not connected
@@ -131,9 +154,6 @@ class SocketNode(Parent):
         
         kargs["headFlag"]=0 # all sockets can have the same flag, so it might as well be 0
         kargs["messageStream"]=self.messageStream
-        self.child=child
-        
-        
         
         Parent.__init__(self,*args,**kargs)
 
@@ -151,10 +171,6 @@ class SocketNode(Parent):
         """
         self.sendEvent(0,data,False) # TODO : just sending sync as raw data event type 0. Could be more adaptive or more clear
     
-
-    def handelCommand(self,message): pass #overload me
-    def issueMessage(self,message):
-        if self.child: self.child.handleMessage(message)
     def streamError(self): self.child.streamError() #Generally for lost or corrupt data removed at higher level
     
     
@@ -173,7 +189,8 @@ class RamSync(Node):
     def load(self):
         self.updatedCallbacks=[]
         
-    def handleMessage(self,message):
+    def handleMessage(self,message): self.handelCommand(message[1:])
+    def handleCommand(self,message):
         self.data=message
         if not self.isLoaded: self.loaded()
         self.updated()
@@ -191,8 +208,9 @@ class StructNode(RamSync):
 class KeyFrameBinDelta(RamSync):
     """ Syncs data based on key frames containing the whole data, and some kind of diff packet """
     def handleMessage(self,message):
-        head=ord(message[0])
-        delta=message[1:]
+        headFlag=ord(message[0])
+        head=ord(message[1])
+        delta=message[2:]
         
         
         needsData=head not in pack.notNeedsData
@@ -201,7 +219,7 @@ class KeyFrameBinDelta(RamSync):
         
         #apply delta here
         data=pack.binDeltaMap[head](self.data if needsData else None,delta)
-        RamSync.handleMessage(self,data)
+        RamSync.handleCommand(self,data)
 
 class PeriodicRequest(RamSync):
     """Asks for updates Periodically"""
