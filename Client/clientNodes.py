@@ -132,6 +132,7 @@ class HttpFile(Node):
         self.fileText=urllib.urlopen(self.linkFields["address"]).read()
         self.loaded()
 
+
 ## RamSync Leaf Nodes ##
 
 class RamSync(Node):
