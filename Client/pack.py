@@ -3,7 +3,9 @@ import zlib
 
 def gzipXorDelta(data,delta):
     rawDelta=zlib.decompress(delta)
-    return ''.join([chr(ord(data[i])^ord(rawDelta[i])) for i in xrange(len(data))])
+    if len(data)==len(rawDelta):
+        return ''.join([chr(ord(data[i])^ord(rawDelta[i])) for i in xrange(len(data))])
+    return None
 
 notNeedsData=set([0,1])
 

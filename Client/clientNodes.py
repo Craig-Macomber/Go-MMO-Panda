@@ -24,19 +24,7 @@ class Node(object):
         self.loadCallBacks=[]
     
     def load(self): pass #Overload Me        
-        
-
-class MessageStream(object):
-    def __init__(self,handler=lambda data: None):
-        self.handler=handler
-    def gotMessage(self,data):
-        self.handler(data)
-
-def makeStreamMultiplexer(headerLength,handlerMap):
-    def handle(message):
-        handlerMap[message[:headerLength]](message[headerLength:])
-    return MessageStream(handle)
-
+    def streamError(self): pass
  
 
 class Parent(Node):
@@ -149,16 +137,21 @@ class HttpFile(Node):
 class RamSync(Node):
     def load(self):
         self.updatedCallbacks=[]
+        self.hasSync=False
         
     def handleMessage(self,message): self.handelCommand(message[1:])
     def handleCommand(self,message):
         self.data=message
+        self.hasSync=True
         if not self.isLoaded: self.loaded()
         self.updated()
         
     def updated(self):
         for f in self.updatedCallbacks: f()
-
+    
+    def streamError(self): self.hasSync=False
+    
+    
 class StructNode(RamSync):
     def load(self):
         self.struct=struct.Struct(self.linkFields["format"])
@@ -176,11 +169,14 @@ class KeyFrameBinDelta(RamSync):
         
         needsData=head not in pack.notNeedsData
         # if not loaded, ignore data that requires a keyframe
-        if not self.isLoaded and needsData: return
+        if not self.hasSync and needsData: return
         
         #apply delta here
         data=pack.binDeltaMap[head](self.data if needsData else None,delta)
-        RamSync.handleCommand(self,data)
+        if data is None:
+            self.hasSync=False
+        else:
+            RamSync.handleCommand(self,data)
 
 class PeriodicRequest(RamSync):
     """Asks for updates Periodically"""

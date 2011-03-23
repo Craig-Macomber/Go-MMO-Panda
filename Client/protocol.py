@@ -94,7 +94,7 @@ class SocketNode(clientNodes.Parent,ReconnectingClientFactory):
         kargs["headFlag"]=0 # all sockets can have the same flag, so it might as well be 0
         
         
-        self.maxDelay=5
+        self.maxDelay=8
         self.initialDelay=0.5
         self.connector=None
         self.messageStreamer=None
@@ -120,7 +120,11 @@ class SocketNode(clientNodes.Parent,ReconnectingClientFactory):
         """
         self.sendMessage(outEventTypeStruct.pack(type)+data,queue)
     
-    def streamError(self): self.child.streamError() #Generally for lost or corrupt data removed at higher level
+    def streamError(self):
+        #Generally for lost or corrupt data removed at higher level
+        for c in self.children.values():
+            c.streamError()
+            
     def connected(self):pass # for initial connections and reconnects.
     
 
@@ -145,6 +149,7 @@ class SocketNode(clientNodes.Parent,ReconnectingClientFactory):
         return _MessageStreamer(self)
 
     def clientConnectionLost(self, connector, reason):
+        self.streamError()
         self.messageStreamer=None
         print 'Lost connection.  Reason:', reason
         self.retry()

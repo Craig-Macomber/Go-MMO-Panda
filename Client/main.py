@@ -2,6 +2,7 @@
 # pollreactor.install()
 
 from twisted.internet import reactor
+from twisted.internet.task import LoopingCall
 
 import clientNodes
 import protocol
@@ -51,13 +52,12 @@ class TestServer(clientNodes.KeyFrameBinDelta):
         clientNodes.KeyFrameBinDelta.load(self)
         self.updatedCallbacks.append(self.handelUpdate)
     def handelUpdate(self):
-        print "Got Update: ",len(self.data),self.data
+        pass #print "Got Update: ",len(self.data),self.data
 
 class EventCatcher(clientNodes.Node):
     def handelMessage(self,message):
         data=message[1:]
         print "Event: "+data
-
 
 # need to make login not try and auto reconnect if login fails (perhaps some sort of time out too)
 # and login after disconnects if login suceeded
@@ -65,11 +65,15 @@ class LoggedInSocket(protocol.SocketNode):
     def load(self): 
         protocol.SocketNode.load(self)
         
-        userName="Test"
-        password="12345"
-        self.sendEvent(1,userName)
-        self.sendEvent(2,password)
+        self.userName="Test"
+        self.password="12345"
+        
 
+        self.loggedIn=False
+    
+    def connected(self):
+        self.sendEvent(1,self.userName)
+        self.sendEvent(2,self.password)
         self.loggedIn=False
         
     def handelCommand(self,message):
@@ -87,7 +91,18 @@ for i in range(1):
     socketNode=LoggedInSocket(server)
     socketNode.addChild(testServer,1)
     socketNode.addChild(eventCatcher,2)
-    x.append(testServer)
-    #socketNode.sendEvent(1,"Test")
+    x.append(socketNode)
 
+
+socketNode=x[0]
+
+# init panda3d
+import direct.showbase.ShowBase
+base=direct.showbase.ShowBase.ShowBase()
+def testFunc():
+    socketNode.sendEvent(3,"MessageTest")
+    
+base.accept("a",testFunc)
+
+LoopingCall(taskMgr.step).start(1.0 / 60)
 reactor.run()
