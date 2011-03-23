@@ -129,6 +129,7 @@ func login(c *Connected, out chan<- *Connected) {
 	//fmt.Println(c.Conn.(*tls.Conn).ConnectionState())
 	name, fail := c.ReadMessage()
 	if !fail{
+		fmt.Println("Got Name:",name)
 		password, fail := c.ReadMessage()
 		if !fail {
 			fmt.Println("Login:", name[0], password[0], string(name[1:]), string(password[1:]))
