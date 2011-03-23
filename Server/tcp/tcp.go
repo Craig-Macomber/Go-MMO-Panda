@@ -70,7 +70,7 @@ const (
 
 func (c *Connected) Disconnect(reason Error, err os.Error) {
 	c.Conn.Close()
-	fmt.Println("Disconnecting", c.Conn.RemoteAddr(), reason, err)
+	fmt.Println("Disconnecting", c.Conn.RemoteAddr(),"Error:", reason, err)
 }
 
 func (c *Connected) SendMessage(data []byte) (failed bool) {
@@ -103,7 +103,7 @@ func (c *Connected) ReadMessage() (data []byte, failed bool) {
 		if err == nil {
 			if lengthCheck != ^(1 + length) {
 				c.Disconnect(InvalidHeader, nil)
-				return
+				return nil, true
 			}
 
 			data := make([]byte, length-8)
@@ -124,9 +124,7 @@ func newConnected(con net.Conn) *Connected {
 }
 
 func login(c *Connected, out chan<- *Connected) {
-	c.Conn.SetReadTimeout(10)
-	c.Conn.SetTimeout(10)
-	//fmt.Println(c.Conn.(*tls.Conn).ConnectionState())
+	//c.Conn.SetReadTimeout(10)
 	name, fail := c.ReadMessage()
 	if !fail{
 		fmt.Println("Got Name:",name)
