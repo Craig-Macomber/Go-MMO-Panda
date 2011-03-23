@@ -45,7 +45,7 @@ type IterBag struct {
 type node struct {
 	Previous *node
 	Next *node
-	Data [arraySize]Connected
+	Data [arraySize]LoggedIn
 }
 
 func NewIterBag() *IterBag {
@@ -54,7 +54,7 @@ func NewIterBag() *IterBag {
 }
 
 // adds element to end
-func (s *IterBag) Add(x Connected) {
+func (s *IterBag) Add(x LoggedIn) {
 	if s.fillIndex>=arraySize-1 {
         n:=&node{Previous: s.end}
         n.Data[0]=x
@@ -69,12 +69,12 @@ func (s *IterBag) Add(x Connected) {
 }
 
 // overwrites the passed Entry with the last entry, then removes the last entry.
-func (s *IterBag) remove(e *Connected) (last bool){
+func (s *IterBag) remove(e *LoggedIn) (last bool){
 	last=e==&s.end.Data[s.fillIndex]
 	*e=s.end.Data[s.fillIndex]
 	
 	if clear {
-	    s.end.Data[s.fillIndex]=*new(Connected)
+	    s.end.Data[s.fillIndex]=*new(LoggedIn)
 	}
 	
 	s.fillIndex--
@@ -89,7 +89,7 @@ func (s *IterBag) remove(e *Connected) (last bool){
 }
 
 // remove and return the last element for stack like use
-func (s *IterBag) Pop() (e Connected) {
+func (s *IterBag) Pop() (e LoggedIn) {
 	s.remove(&e) // explotes how remove works
 	return
 }
@@ -101,7 +101,7 @@ func (s *IterBag) Length() int{
 
 // safe to modify entries in returned blocks, but calling Add or Remove while
 // processing will cause unexpected issues
-func (s *IterBag) BlockChan(out chan<- []Connected) {
+func (s *IterBag) BlockChan(out chan<- []LoggedIn) {
     for n:=s.start ; n.Next!=nil ; n=n.Next {
         out<-n.Data[:]
     }
@@ -114,7 +114,7 @@ type Iterator struct{
     n *node
     Bag *IterBag
     index int // &n.Data[index]==Current
-    Current *Connected
+    Current *LoggedIn
 }
 
 func (s *IterBag) NewIterator() *Iterator{
@@ -124,7 +124,7 @@ func (s *IterBag) NewIterator() *Iterator{
 }
 
 // removes Current, and goes to and returns Next. Effects ordering (last moved to Next)
-func (i *Iterator) Remove() (out *Connected){
+func (i *Iterator) Remove() (out *LoggedIn){
     if i.Bag.remove(i.Current) {
         i.Current=nil
     }
@@ -132,7 +132,7 @@ func (i *Iterator) Remove() (out *Connected){
 }
 
 // adds an item to the end by just calling the set's Add
-func (i *Iterator) Add(e Connected) {
+func (i *Iterator) Add(e LoggedIn) {
     i.Bag.Add(e)
 }
 
@@ -169,7 +169,7 @@ func (i *Iterator) Iter(){
     }
 }
 // Here we will test that the types parameters are ok...
-func testTypes(arg0 Connected) {
+func testTypes(arg0 LoggedIn) {
     f := func(interface{}) { } // this func does nothing...
     f(arg0)
 }

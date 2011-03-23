@@ -138,6 +138,7 @@ class SocketNode(clientNodes.Parent,ReconnectingClientFactory):
     
     def disconnect(self):
         """ disconnect, which will lead to auto reconnect unless prevented"""
+        print "disconnecting"
         self.connector.disconnect()
     
     def startedConnecting(self, connector):

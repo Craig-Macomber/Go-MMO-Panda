@@ -1,6 +1,6 @@
 #!/bin/bash
 
-gotgo -o=tcp/connectedBag.go -package-name=tcp iterbag.got Connected
+gotgo -o=tcp/connectedBag.go -package-name=tcp iterbag.got LoggedIn
 
 
 # 6g -o tcp.6 tcp/*.go

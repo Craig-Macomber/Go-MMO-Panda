@@ -61,6 +61,18 @@ type Connected struct {
 	Conn net.Conn
 }
 
+
+type Player struct {
+    Name string
+    passwordHash string
+}
+
+
+type LoggedIn struct {
+	Connected
+	*Player
+}
+
 type Error int
 
 const (
@@ -123,8 +135,7 @@ func newConnected(con net.Conn) *Connected {
 	return c
 }
 
-func login(c *Connected, out chan<- *Connected) {
-	//c.Conn.SetReadTimeout(10)
+func login(c *Connected, out chan<- *LoggedIn) {
 	name, fail := c.ReadMessage()
 	if !fail{
 		fmt.Println("Got Name:",name)
@@ -134,7 +145,7 @@ func login(c *Connected, out chan<- *Connected) {
 			loginSucess:=[...]byte{0,0}[:]
 			c.SendMessage(loginSucess)
 			
-			out <- c
+			out <- &LoggedIn{*c,&Player{string(name),string(password)}}
 			return
 		}
 	}
@@ -142,7 +153,7 @@ func login(c *Connected, out chan<- *Connected) {
 	fmt.Println("LOGIN FAIL")
 }
 
-func welcomTestLoop(in <-chan net.Conn, out chan<- *Connected) {
+func welcomTestLoop(in <-chan net.Conn, out chan<- *LoggedIn) {
 	for c := range in {
 		go login(newConnected(c), out)
 	}
@@ -276,7 +287,18 @@ func (e *EventNode) Add(event *Event){
 
 
 
-func updateLoop(in <-chan *Connected) {
+func broadcast(source *LoggedIn, dst *EventNode){
+    for{
+        data,failed:=source.ReadMessage()
+        if failed{
+            return
+        } else {
+            dst.Add(&Event{append([]byte(source.Name+": "),data...)})
+        }
+    }
+}
+
+func updateLoop(in <-chan *LoggedIn) {
 	bag := NewIterBag()
 	const size = 100
 	data := make([]byte, size)
@@ -310,6 +332,7 @@ func updateLoop(in <-chan *Connected) {
 					break L
 				} else {
 					bag.Add(*newCon)
+					go broadcast(newCon,eventNode)
 				}
 			case _ = <-waitChan:
 				break L
@@ -356,7 +379,7 @@ func SetupTCP(useTls bool,address string) {
 
 	go getConnections(listener, conChan, halt)
 
-	conChan2 := make(chan *Connected, connectedAndWaitingMax)
+	conChan2 := make(chan *LoggedIn, connectedAndWaitingMax)
 
 	go welcomTestLoop(conChan, conChan2)
 	go updateLoop(conChan2)
