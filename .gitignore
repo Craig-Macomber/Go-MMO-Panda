@@ -5,3 +5,4 @@
 _obj
 Server/main
 *.go.swp
+Server/bin/
