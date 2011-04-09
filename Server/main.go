@@ -45,18 +45,18 @@ func startServers(serverType string, serverList io.Reader, servers map[string]fu
 
 
 func LaunchLoginServer(data [][]byte) {
-    protocal:=string(data[2])
-    address:=":"+string(data[1])
-    if protocal=="tlsRawTCP"{
-	    tcp.SetupTCP(true,address)
-    } else if protocal=="rawTCP" {
-        tcp.SetupTCP(false,address)
-    }
+	protocal := string(data[2])
+	address := ":" + string(data[1])
+	if protocal == "tlsRawTCP" {
+		tcp.SetupTCP(true, address)
+	} else if protocal == "rawTCP" {
+		tcp.SetupTCP(false, address)
+	}
 }
 
 func httpLauncher(pattern string, handler func(http.ResponseWriter, *http.Request)) func([][]byte) {
 	return func(data [][]byte) {
-		addr:=":"+string(data[1])
+		addr := ":" + string(data[1])
 		mux, ok := httpHandlers[addr]
 		if !ok {
 			mux = http.NewServeMux()

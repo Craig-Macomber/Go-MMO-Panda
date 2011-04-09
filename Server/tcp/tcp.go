@@ -39,10 +39,10 @@ func getConnections(listener net.Listener, out chan<- net.Conn, halt <-chan int)
 		println("listener.Accept")
 		if err == nil {
 			/*
-fmt.Println("Handshake start")
-			err=con.(*tls.Conn).Handshake()
-			fmt.Println("Handshake err:",err)
-*/
+			fmt.Println("Handshake start")
+						err=con.(*tls.Conn).Handshake()
+						fmt.Println("Handshake err:",err)
+			*/
 
 			select {
 			case _ = <-halt:
@@ -63,8 +63,8 @@ type Connected struct {
 
 
 type Player struct {
-    Name string
-    passwordHash string
+	Name         string
+	passwordHash string
 }
 
 
@@ -82,7 +82,7 @@ const (
 
 func (c *Connected) Disconnect(reason Error, err os.Error) {
 	c.Conn.Close()
-	fmt.Println("Disconnecting", c.Conn.RemoteAddr(),"Error:", reason, err)
+	fmt.Println("Disconnecting", c.Conn.RemoteAddr(), "Error:", reason, err)
 }
 
 func (c *Connected) SendMessage(data []byte) (failed bool) {
@@ -137,19 +137,19 @@ func newConnected(con net.Conn) *Connected {
 
 func login(c *Connected, out chan<- *LoggedIn) {
 	name, fail := c.ReadMessage()
-	if !fail{
-		fmt.Println("Got Name:",name)
+	if !fail {
+		fmt.Println("Got Name:", name)
 		password, fail := c.ReadMessage()
 		if !fail {
 			fmt.Println("Login:", name[0], password[0], string(name[1:]), string(password[1:]))
-			loginSucess:=[...]byte{0,0}[:]
+			loginSucess := [...]byte{0, 0}[:]
 			c.SendMessage(loginSucess)
-			
-			out <- &LoggedIn{*c,&Player{string(name),string(password)}}
+
+			out <- &LoggedIn{*c, &Player{string(name), string(password)}}
 			return
 		}
 	}
-	
+
 	fmt.Println("LOGIN FAIL")
 }
 
@@ -159,8 +159,6 @@ func welcomTestLoop(in <-chan net.Conn, out chan<- *LoggedIn) {
 	}
 	close(out)
 }
-
-
 
 
 type SyncNode interface {
@@ -173,66 +171,64 @@ type ParentNode struct {
 }
 
 
-func newParentNode(children []SyncNode, headFlag byte) *ParentNode{
-	return &ParentNode{children,headFlag}
+func newParentNode(children []SyncNode, headFlag byte) *ParentNode {
+	return &ParentNode{children, headFlag}
 }
 
-func (n *ParentNode) Write(b *IterBag){
-	for _,child:=range(n.children){
+func (n *ParentNode) Write(b *IterBag) {
+	for _, child := range n.children {
 		child.Write(b)
 	}
 }
 
 
 type RamSync struct {
-	Data []byte
-	oldData []byte
+	Data                []byte
+	oldData             []byte
 	framesSinceKeyframe int
-	headFlag byte
+	headFlag            byte
 }
 
-func NewRamSync(data []byte,headFlag byte) *RamSync{
-	return &RamSync{data,nil,0,headFlag}
+func NewRamSync(data []byte, headFlag byte) *RamSync {
+	return &RamSync{data, nil, 0, headFlag}
 }
 
-func (n *RamSync) Write(b *IterBag){
+func (n *RamSync) Write(b *IterBag) {
 	n.framesSinceKeyframe++
-	size:=len(n.Data)
-	oldValid:=true
-	if n.oldData==nil || len(n.oldData)!=size{
-		n.oldData=make([]byte,size)
-		oldValid=false
+	size := len(n.Data)
+	oldValid := true
+	if n.oldData == nil || len(n.oldData) != size {
+		n.oldData = make([]byte, size)
+		oldValid = false
 	}
-	
+
 	buff := new(bytes.Buffer)
 	mtype := uint8(2)
 	toSend := n.Data
-	
+
 	if !oldValid || n.framesSinceKeyframe%16 == 0 {
 		mtype = 1
 	} else {
-		xOrData:=make([]byte,size)
+		xOrData := make([]byte, size)
 		for i := 0; i < size; i++ {
 			xOrData[i] = n.Data[i] ^ n.oldData[i]
 		}
-		toSend=xOrData
+		toSend = xOrData
 	}
 	for i := 0; i < size; i++ {
 		n.oldData[i] = n.Data[i]
 	}
 	buff.WriteByte(n.headFlag)
 	buff.WriteByte(mtype)
-	
+
 	zlibw, _ := zlib.NewWriter(buff)
 	zlibw.Write(toSend)
 	zlibw.Close()
 
 	buffBytes := buff.Bytes()
-	
-	iterTrySendAll(b,buffBytes)
+
+	iterTrySendAll(b, buffBytes)
 }
-
-
 
 
 type Event struct {
@@ -241,22 +237,22 @@ type Event struct {
 
 
 type EventNode struct {
-	sync sync.Mutex
-	events []*Event
+	sync     sync.Mutex
+	events   []*Event
 	headFlag byte
 }
 
-func NewEventNode(headFlag byte) *EventNode{
-	return &EventNode{events:make([]*Event,0),headFlag:headFlag}
+func NewEventNode(headFlag byte) *EventNode {
+	return &EventNode{events: make([]*Event, 0), headFlag: headFlag}
 }
 
-func iterTrySendAll(bag *IterBag,data []byte) {
+func iterTrySendAll(bag *IterBag, data []byte) {
 	for iter := bag.NewIterator(); iter.Current != nil; iter.Iter() {
-		iterTrySend(iter,data)
+		iterTrySend(iter, data)
 	}
 }
 
-func iterTrySend(iter *Iterator,data []byte) {
+func iterTrySend(iter *Iterator, data []byte) {
 	failed := iter.Current.SendMessage(data)
 	if failed {
 		iter.Remove()
@@ -265,37 +261,36 @@ func iterTrySend(iter *Iterator,data []byte) {
 	}
 }
 
-func (e *EventNode) Write(b *IterBag){
+func (e *EventNode) Write(b *IterBag) {
 	e.sync.Lock()
-	oldEvents:=e.events
-	e.events=make([]*Event,0)
+	oldEvents := e.events
+	e.events = make([]*Event, 0)
 	e.sync.Unlock()
-	for _,event:=range(oldEvents){
-		data:=make([]byte,len(event.Data)+1)
-		data[0]=e.headFlag
-		copy(data[1:],event.Data)
-		iterTrySendAll(b,data)
+	for _, event := range oldEvents {
+		data := make([]byte, len(event.Data)+1)
+		data[0] = e.headFlag
+		copy(data[1:], event.Data)
+		iterTrySendAll(b, data)
 	}
-	
+
 }
 
-func (e *EventNode) Add(event *Event){
+func (e *EventNode) Add(event *Event) {
 	e.sync.Lock()
-	e.events=append(e.events,event)
+	e.events = append(e.events, event)
 	e.sync.Unlock()
 }
 
 
-
-func broadcast(source *LoggedIn, dst *EventNode){
-    for{
-        data,failed:=source.ReadMessage()
-        if failed{
-            return
-        } else {
-            dst.Add(&Event{append([]byte(source.Name+": "),data...)})
-        }
-    }
+func broadcast(source *LoggedIn, dst *EventNode) {
+	for {
+		data, failed := source.ReadMessage()
+		if failed {
+			return
+		} else {
+			dst.Add(&Event{append([]byte(source.Name+": "), data...)})
+		}
+	}
 }
 
 func updateLoop(in <-chan *LoggedIn) {
@@ -306,18 +301,16 @@ func updateLoop(in <-chan *LoggedIn) {
 	for i := 0; i < size; i++ {
 		data[i] = uint8(i)
 	}
-	
-	data=[]byte("TEST_DATA")
-	
-	
-	ramSync:=NewRamSync(data,1)
-	eventNode:=NewEventNode(2)
-	children:=make([]SyncNode,2)
-	children[0]=ramSync
-	children[1]=eventNode
-	root:=newParentNode(children,0)
-	
-	
+
+	data = []byte("TEST_DATA")
+
+	ramSync := NewRamSync(data, 1)
+	eventNode := NewEventNode(2)
+	children := make([]SyncNode, 2)
+	children[0] = ramSync
+	children[1] = eventNode
+	root := newParentNode(children, 0)
+
 	frameCount := 0
 	for {
 
@@ -332,7 +325,7 @@ func updateLoop(in <-chan *LoggedIn) {
 					break L
 				} else {
 					bag.Add(*newCon)
-					go broadcast(newCon,eventNode)
+					go broadcast(newCon, eventNode)
 				}
 			case _ = <-waitChan:
 				break L
@@ -344,35 +337,34 @@ func updateLoop(in <-chan *LoggedIn) {
 			println(frameCount, " - ", bag.Length())
 		}
 		if frameCount%20 == 0 {
-			ramSync.Data=append(ramSync.Data,'x')
+			ramSync.Data = append(ramSync.Data, 'x')
 		}
-		
+
 		root.Write(bag)
 	}
 }
 
-func SetupTCP(useTls bool,address string) {
-	println("Setting Up TCP at:",address)
+func SetupTCP(useTls bool, address string) {
+	println("Setting Up TCP at:", address)
 	const connectedAndWaitingMax = 0
 	conChan := make(chan net.Conn, connectedAndWaitingMax)
 	halt := make(chan int)
-	
+
 	var listener net.Listener
 	var err os.Error
-	if useTls{
-		certs:=make([]tls.Certificate,1)
-		c0,errx:=tls.LoadX509KeyPair("cert/cert.pem", "cert/key.pem")
-		certs[0]=c0
+	if useTls {
+		certs := make([]tls.Certificate, 1)
+		c0, errx := tls.LoadX509KeyPair("cert/cert.pem", "cert/key.pem")
+		certs[0] = c0
 		fmt.Println(errx)
-		config:=tls.Config{Certificates:certs,ServerName:"TestServer"}
-		listener, err = tls.Listen("tcp", ":6666",&config)
+		config := tls.Config{Certificates: certs, ServerName: "TestServer"}
+		listener, err = tls.Listen("tcp", ":6666", &config)
 		println("TLS")
 	} else {
 		listener, err = net.Listen("tcp", ":6666")
 		println("TCP")
 	}
-	
-	
+
 	if err != nil {
 		println(err)
 	}
